@@ -2,11 +2,18 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import plotly.express as px
-from PIL import Image
+from PIL import Image, ExifTags
 import os
 import random
 import string
 import datetime
+
+# Attempt browser GPS if available
+try:
+    from streamlit_js_eval import get_geolocation
+    HAS_GEO_EVAL = True
+except ImportError:
+    HAS_GEO_EVAL = False
 
 # ---------------------------------------------------------
 # PAGE CONFIGURATION & CUSTOM STYLING
@@ -95,6 +102,44 @@ logo_file = get_logo_path()
 os.makedirs("uploaded_movs", exist_ok=True)
 os.makedirs("uploaded_photos", exist_ok=True)
 
+# EXIF GPS EXTRACTOR FUNCTION
+def extract_gps_from_image(image_file):
+    try:
+        img = Image.open(image_file)
+        exif = img._getexif()
+        if not exif:
+            return None, None
+            
+        geotagging = {}
+        for (idx, tag) in ExifTags.TAGS.items():
+            if tag == 'GPSInfo':
+                if idx not in exif:
+                    return None, None
+                for (key, val) in ExifTags.GPSTAGS.items():
+                    if key in exif[idx]:
+                        geotagging[val] = exif[idx][key]
+        
+        if not geotagging:
+            return None, None
+            
+        def convert_to_degrees(value):
+            d = float(value[0])
+            m = float(value[1])
+            s = float(value[2])
+            return d + (m / 60.0) + (s / 3600.0)
+
+        lat = convert_to_degrees(geotagging['GPSLatitude'])
+        if geotagging['GPSLatitudeRef'] != 'N':
+            lat = -lat
+
+        lon = convert_to_degrees(geotagging['GPSLongitude'])
+        if geotagging['GPSLongitudeRef'] != 'E':
+            lon = -lon
+
+        return str(round(lat, 6)), str(round(lon, 6))
+    except Exception:
+        return None, None
+
 # ---------------------------------------------------------
 # 1. LOCAL SQLITE DATABASE INITIALIZATION
 # ---------------------------------------------------------
@@ -126,6 +171,7 @@ def init_db():
             mov_attendance TEXT,
             mov_minutes TEXT,
             mov_lgu_minutes TEXT,
+            mov_grs_files TEXT,
             remarks TEXT
         )
     """)
@@ -148,6 +194,7 @@ def init_db():
             mov_attendance TEXT,
             mov_brgy_minutes TEXT,
             mov_lgu_minutes TEXT,
+            mov_cv_files TEXT,
             remarks TEXT
         )
     """)
@@ -276,7 +323,6 @@ def login():
     
     with c_center:
         if logo_file:
-            # Mao ni ang para ma-center gyud ang logo lods:
             l_col1, l_col2, l_col3 = st.columns([1, 3, 1])
             with l_col2:
                 st.image(logo_file, use_container_width=True)
@@ -400,7 +446,7 @@ TABS = [
     "Summary"
 ]
 
-# Helper function to save uploaded file
+# Helper function to save single uploaded file
 def save_uploaded_file(file_obj):
     if file_obj is not None:
         file_path = os.path.join("uploaded_movs", file_obj.name)
@@ -409,8 +455,19 @@ def save_uploaded_file(file_obj):
         return file_obj.name
     return ""
 
+# Helper function to save multiple uploaded files
+def save_multiple_files(files_list):
+    saved_names = []
+    if files_list:
+        for file_obj in files_list:
+            file_path = os.path.join("uploaded_movs", file_obj.name)
+            with open(file_path, "wb") as f:
+                f.write(file_obj.getbuffer())
+            saved_names.append(file_obj.name)
+    return ", ".join(saved_names)
+
 # ---------------------------------------------------------
-# 4. POLISHED SIDEBAR NAVIGATION & LOGO
+# 4. POLISHED SIDEBAR NAVIGATION & LOGO WITH DEVELOPER CREDIT
 # ---------------------------------------------------------
 if logo_file:
     st.sidebar.image(logo_file, width=220)
@@ -428,6 +485,19 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
 st.sidebar.markdown("---")
 st.sidebar.title("📌 System Navigation")
 selected_view = st.sidebar.radio("Select Active Module:", TABS)
+
+# DEVELOPER OWNERSHIP CREDIT (REQUIREMENT #1)
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    """
+    <div style="text-align: center; font-size: 0.8em; color: #CBD5E1;">
+        💻 <b>System Developer & Architect</b><br>
+        Developed with ❤️ by <br><b style="color:#00E6FF;">LOUIE B. IDULSA - PDBBM ITO I</b><br>
+        <i>DSWD FO X - PAMANA CDPD © 2026</i>
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
 
 # Top Header
 c_hdr1, c_hdr2 = st.columns([3, 1])
@@ -527,22 +597,39 @@ elif selected_view == "User Management Portal":
     st.dataframe(pd.DataFrame(users_data), use_container_width=True)
 
 # ---------------------------------------------------------
-# 7. GEOTAGGED PHOTOS MODULE
+# 7. GEOTAGGED PHOTOS MODULE WITH AUTO-GPS DETECT (REQUIREMENT #2)
 # ---------------------------------------------------------
 elif selected_view == "Geotagged_Photos":
     st.subheader("📸 Geotagged Photos & Progress File Uploads")
     
     with st.expander("📤 Upload New Geotagged Photo", expanded=True):
+        uploaded_file = st.file_uploader("Choose Photo / File (JPG / PNG)", type=["jpg", "jpeg", "png", "pdf"], key="geo_upl_file")
+        
+        detected_lat, detected_lon = "", ""
+        if uploaded_file and uploaded_file.type in ["image/jpeg", "image/png"]:
+            exif_lat, exif_lon = extract_gps_from_image(uploaded_file)
+            if exif_lat and exif_lon:
+                detected_lat, detected_lon = exif_lat, exif_lon
+                st.success(f"⚡ **AUTO-DETECTED GPS EXIF METADATA:** Latitude: `{detected_lat}` | Longitude: `{detected_lon}`")
+            else:
+                st.warning("⚠️ Walay EXIF GPS Metadata nga nakit-an sa litrato. Nagpili gikan sa Browser GPS o Manual Entry...")
+                if HAS_GEO_EVAL:
+                    location = get_geolocation()
+                    if location and 'coords' in location:
+                        detected_lat = str(round(location['coords']['latitude'], 6))
+                        detected_lon = str(round(location['coords']['longitude'], 6))
+                        st.info(f"🌐 **BROWSER LIVE GPS DETECTED:** Latitude: `{detected_lat}` | Longitude: `{detected_lon}`")
+
         with st.form("photo_upload_form", clear_on_submit=True):
             col_u1, col_u2 = st.columns(2)
             with col_u1:
                 sp_id = st.text_input("Sub-Project ID / Code")
                 sp_name = st.text_input("Sub-Project Name")
                 stage = st.selectbox("Stage", ["BEFORE Construction", "DURING Construction", "AFTER / Completed"])
-                latitude = st.text_input("Latitude (GPS)")
+                latitude = st.text_input("Latitude (GPS)*", value=detected_lat)
             with col_u2:
-                longitude = st.text_input("Longitude (GPS)")
-                uploaded_file = st.file_uploader("Choose Photo / File (JPG / PNG)", type=["jpg", "jpeg", "png", "pdf"])
+                longitude = st.text_input("Longitude (GPS)*", value=detected_lon)
+                st.caption("📷 File preview or auto-detected metadata will reflect automatically.")
 
             submit_photo = st.form_submit_button("⬆️ Submit & Save Photo")
             if submit_photo and uploaded_file and sp_id:
@@ -561,7 +648,7 @@ elif selected_view == "Geotagged_Photos":
 
                 st.success(f"Ang photo nga '{uploaded_file.name}' na-save na sa database!")
                 if uploaded_file.type in ["image/jpeg", "image/png"]:
-                    st.image(Image.open(uploaded_file), caption=f"Preview: {stage} - {sp_id}", width=350)
+                    st.image(Image.open(uploaded_file), caption=f"Preview: {stage} - {sp_id} (Lat: {latitude}, Lon: {longitude})", width=350)
                 st.rerun()
 
     st.markdown("---")
@@ -587,7 +674,8 @@ else:
                 # --- FOR CEAC MUNICIPAL ---
                 if selected_view == "CEAC_Municipal":
                     with col_left:
-                        form_data["activity_name"] = st.selectbox("Select Municipal Activity", MUNICIPAL_ACTIVITIES, key="cm_act")
+                        selected_m_act = st.selectbox("Select Municipal Activity", MUNICIPAL_ACTIVITIES, key="cm_act")
+                        form_data["activity_name"] = selected_m_act
                         form_data["region"] = st.selectbox("Region", REGIONS, key="cm_reg")
                         form_data["province"] = st.selectbox("Province", PROVINCES, key="cm_prov")
                         form_data["municipality"] = st.selectbox("Municipality", MUNICIPALITIES, key="cm_mun")
@@ -604,34 +692,48 @@ else:
                         form_data["remarks"] = st.text_area("Remarks", key="cm_rem")
 
                     st.markdown("---")
-                    st.markdown("##### 📁 Upload MOVs (Separate Buttons for Municipal Activities)")
                     
-                    mov_col1, mov_col2, mov_col3 = st.columns(3)
-                    with mov_col1:
-                        st.markdown("**1. Upload Attendance**")
-                        att_file = st.file_uploader("Choose Attendance File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_att")
-                        form_data["mov_attendance"] = save_uploaded_file(att_file)
-                        if att_file and att_file.type in ["image/jpeg", "image/png"]:
-                            st.image(Image.open(att_file), caption="Attendance Preview", width=140)
+                    # REQUIREMENT #4: GRS INTAKE CUSTOM MULTIPLE FILE UPLOAD (UP TO 10 FILES)
+                    if selected_m_act == "GRS Instake":
+                        st.markdown("##### 📁 Upload GRS Intake Files (Multiple Upload - Up to 10 Files)")
+                        grs_files = st.file_uploader("Choose GRS Files (Max 10)", type=["pdf", "png", "jpg", "jpeg", "docx"], accept_multiple_files=True, key="cm_grs_files")
+                        if grs_files and len(grs_files) > 10:
+                            st.error("⚠️ Labaw sa 10 ka files ang imong gi-upload! Palihog og pili lang hangtod 10 ka files.")
+                            grs_files = grs_files[:10]
+                        form_data["mov_attendance"] = "N/A - GRS Intake"
+                        form_data["mov_minutes"] = "N/A - GRS Intake"
+                        form_data["mov_lgu_minutes"] = "N/A - GRS Intake"
+                        form_data["mov_grs_files"] = save_multiple_files(grs_files)
+                    else:
+                        st.markdown("##### 📁 Upload MOVs (Separate Buttons for Municipal Activities)")
+                        mov_col1, mov_col2, mov_col3 = st.columns(3)
+                        with mov_col1:
+                            st.markdown("**1. Upload Attendance**")
+                            att_file = st.file_uploader("Choose Attendance File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_att")
+                            form_data["mov_attendance"] = save_uploaded_file(att_file)
+                            if att_file and att_file.type in ["image/jpeg", "image/png"]:
+                                st.image(Image.open(att_file), caption="Attendance Preview", width=140)
 
-                    with mov_col2:
-                        st.markdown("**2. Upload Minutes of Activity**")
-                        min_file = st.file_uploader("Choose Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_min")
-                        form_data["mov_minutes"] = save_uploaded_file(min_file)
-                        if min_file and min_file.type in ["image/jpeg", "image/png"]:
-                            st.image(Image.open(min_file), caption="Minutes Preview", width=140)
+                        with mov_col2:
+                            st.markdown("**2. Upload Minutes of Activity**")
+                            min_file = st.file_uploader("Choose Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_min")
+                            form_data["mov_minutes"] = save_uploaded_file(min_file)
+                            if min_file and min_file.type in ["image/jpeg", "image/png"]:
+                                st.image(Image.open(min_file), caption="Minutes Preview", width=140)
 
-                    with mov_col3:
-                        st.markdown("**3. Upload LGU Minutes of Activity**")
-                        lgu_min_file = st.file_uploader("Choose LGU Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_lgu_min")
-                        form_data["mov_lgu_minutes"] = save_uploaded_file(lgu_min_file)
-                        if lgu_min_file and lgu_min_file.type in ["image/jpeg", "image/png"]:
-                            st.image(Image.open(lgu_min_file), caption="LGU Minutes Preview", width=140)
+                        with mov_col3:
+                            st.markdown("**3. Upload LGU Minutes of Activity**")
+                            lgu_min_file = st.file_uploader("Choose LGU Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_lgu_min")
+                            form_data["mov_lgu_minutes"] = save_uploaded_file(lgu_min_file)
+                            if lgu_min_file and lgu_min_file.type in ["image/jpeg", "image/png"]:
+                                st.image(Image.open(lgu_min_file), caption="LGU Minutes Preview", width=140)
+                        form_data["mov_grs_files"] = ""
 
                 # --- FOR CEAC BARANGAY ---
                 elif selected_view == "CEAC_Barangay":
                     with col_left:
-                        form_data["activity_name"] = st.selectbox("Select Barangay Activity", BARANGAY_ACTIVITIES, key="cb_act")
+                        selected_b_act = st.selectbox("Select Barangay Activity", BARANGAY_ACTIVITIES, key="cb_act")
+                        form_data["activity_name"] = selected_b_act
                         form_data["region"] = st.selectbox("Region", REGIONS, key="cb_reg")
                         form_data["province"] = st.selectbox("Province", PROVINCES, key="cb_prov")
                         form_data["municipality"] = st.selectbox("Municipality", MUNICIPALITIES, key="cb_mun")
@@ -649,29 +751,42 @@ else:
                         form_data["remarks"] = st.text_area("Remarks", key="cb_rem")
 
                     st.markdown("---")
-                    st.markdown("##### 📁 Upload MOVs (Separate Buttons for Barangay Activities)")
                     
-                    mov_col1, mov_col2, mov_col3 = st.columns(3)
-                    with mov_col1:
-                        st.markdown("**1. Upload Attendance**")
-                        att_file = st.file_uploader("Choose Attendance File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_att")
-                        form_data["mov_attendance"] = save_uploaded_file(att_file)
-                        if att_file and att_file.type in ["image/jpeg", "image/png"]:
-                            st.image(Image.open(att_file), caption="Attendance Preview", width=140)
+                    # REQUIREMENT #5: CV (COMMUNITY VOLUNTEERS) CUSTOM MULTIPLE FILE UPLOAD (UP TO 30 CVs)
+                    if selected_b_act == "CV":
+                        st.markdown("##### 📁 Upload CV Files (Multiple Upload - Up to 30 CVs)")
+                        cv_files = st.file_uploader("Choose CV Files (Max 30)", type=["pdf", "png", "jpg", "jpeg", "docx"], accept_multiple_files=True, key="cb_cv_files")
+                        if cv_files and len(cv_files) > 30:
+                            st.error("⚠️ Labaw sa 30 ka files ang imong gi-upload! Palihog og pili lang hangtod 30 ka files.")
+                            cv_files = cv_files[:30]
+                        form_data["mov_attendance"] = "N/A - CV"
+                        form_data["mov_brgy_minutes"] = "N/A - CV"
+                        form_data["mov_lgu_minutes"] = "N/A - CV"
+                        form_data["mov_cv_files"] = save_multiple_files(cv_files)
+                    else:
+                        st.markdown("##### 📁 Upload MOVs (Separate Buttons for Barangay Activities)")
+                        mov_col1, mov_col2, mov_col3 = st.columns(3)
+                        with mov_col1:
+                            st.markdown("**1. Upload Attendance**")
+                            att_file = st.file_uploader("Choose Attendance File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_att")
+                            form_data["mov_attendance"] = save_uploaded_file(att_file)
+                            if att_file and att_file.type in ["image/jpeg", "image/png"]:
+                                st.image(Image.open(att_file), caption="Attendance Preview", width=140)
 
-                    with mov_col2:
-                        st.markdown("**2. Upload Brgy Minutes of Activity**")
-                        brgy_min_file = st.file_uploader("Choose Brgy Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_brgy_min")
-                        form_data["mov_brgy_minutes"] = save_uploaded_file(brgy_min_file)
-                        if brgy_min_file and brgy_min_file.type in ["image/jpeg", "image/png"]:
-                            st.image(Image.open(brgy_min_file), caption="Brgy Minutes Preview", width=140)
+                        with mov_col2:
+                            st.markdown("**2. Upload Brgy Minutes of Activity**")
+                            brgy_min_file = st.file_uploader("Choose Brgy Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_brgy_min")
+                            form_data["mov_brgy_minutes"] = save_uploaded_file(brgy_min_file)
+                            if brgy_min_file and brgy_min_file.type in ["image/jpeg", "image/png"]:
+                                st.image(Image.open(brgy_min_file), caption="Brgy Minutes Preview", width=140)
 
-                    with mov_col3:
-                        st.markdown("**3. Upload LGU Minutes of Activity**")
-                        lgu_min_file = st.file_uploader("Choose LGU Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_lgu_min")
-                        form_data["mov_lgu_minutes"] = save_uploaded_file(lgu_min_file)
-                        if lgu_min_file and lgu_min_file.type in ["image/jpeg", "image/png"]:
-                            st.image(Image.open(lgu_min_file), caption="LGU Minutes Preview", width=140)
+                        with mov_col3:
+                            st.markdown("**3. Upload LGU Minutes of Activity**")
+                            lgu_min_file = st.file_uploader("Choose LGU Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_lgu_min")
+                            form_data["mov_lgu_minutes"] = save_uploaded_file(lgu_min_file)
+                            if lgu_min_file and lgu_min_file.type in ["image/jpeg", "image/png"]:
+                                st.image(Image.open(lgu_min_file), caption="LGU Minutes Preview", width=140)
+                        form_data["mov_cv_files"] = ""
 
                 # --- SUB-PROJECT CLOSEOUT TRACKER FORM ---
                 elif selected_view == "Sub_Project_Closeout_Tracker":
@@ -756,7 +871,7 @@ else:
                     st.session_state["show_add_form"] = False
                     st.rerun()
 
-    # LIVE DATA TABLE DISPLAY UNDER FORM (REQUIREMENT #3)
+    # LIVE DATA TABLE DISPLAY & LACKING ACTIVITIES/MOVS CALCULATOR (REQUIREMENT #3)
     st.markdown("---")
     st.subheader(f"📊 Added Activities Masterlist ({selected_view})")
     
@@ -780,5 +895,67 @@ else:
             conn.close()
             st.success("Database synchronized successfully!")
             st.rerun()
+
+        # REQUIREMENT #3: LACKING ACTIVITIES & LACKING MOVs TRACKER SUMMARY AT THE BOTTOM
+        if selected_view in ["CEAC_Municipal", "CEAC_Barangay"]:
+            st.markdown("---")
+            st.markdown("### ⚠️ Lacking Activities & Lacking MOVs Audit Trail Tracker")
+            
+            ref_activities = MUNICIPAL_ACTIVITIES if selected_view == "CEAC_Municipal" else BARANGAY_ACTIVITIES
+            conducted_acts = df_filtered["activity_name"].dropna().unique().tolist() if "activity_name" in df_filtered.columns else []
+            lacking_acts = [act for act in ref_activities if act not in conducted_acts]
+            
+            c_lak1, c_lak2 = st.columns(2)
+            with c_lak1:
+                st.markdown("#### 📌 Activities Not Yet Conducted:")
+                if lacking_acts:
+                    for act in lacking_acts:
+                        st.error(f"❌ **{act}** - Not Yet Conducted")
+                else:
+                    st.success("🎉 All CEAC Activities completed and encoded!")
+
+            with c_lak2:
+                st.markdown("#### 📄 Records with Lacking MOVs:")
+                lacking_mov_count = 0
+                for _, row in df_filtered.iterrows():
+                    act_n = row.get("activity_name", "N/A")
+                    missing_movs = []
+                    
+                    if act_n == "GRS Instake":
+                        if not str(row.get("mov_grs_files", "")).strip():
+                            missing_movs.append("GRS Multiple Files")
+                    elif act_n == "CV":
+                        if not str(row.get("mov_cv_files", "")).strip():
+                            missing_movs.append("CV Multiple Files")
+                    else:
+                        if not str(row.get("mov_attendance", "")).strip():
+                            missing_movs.append("Attendance")
+                        
+                        min_col = "mov_minutes" if selected_view == "CEAC_Municipal" else "mov_brgy_minutes"
+                        if not str(row.get(min_col, "")).strip():
+                            missing_movs.append("Minutes of Activity")
+                            
+                        if not str(row.get("mov_lgu_minutes", "")).strip():
+                            missing_movs.append("LGU Minutes")
+
+                    if missing_movs:
+                        lacking_mov_count += 1
+                        st.warning(f"⚠️ **ID #{row.get('id', '')} - {act_n}:** Missing ({', '.join(missing_movs)})")
+
+                if lacking_mov_count == 0:
+                    st.success("✅ All encoded records have complete MOVs uploaded!")
+
     else:
         st.info(f"Wala pa'y gi-add nga records sa '{selected_view}'. Pwede ka mag-add gamit ang '➕ Add New Activity / Record' button sa taas.")
+
+# DEVELOPER FOOTER BADGE
+st.markdown("---")
+st.markdown(
+    """
+    <div style="text-align: center; font-size: 0.85em; color: #6c757d; padding-bottom: 20px;">
+        ⚙️ <b>PAMANA Peace & Development Program Management System</b> | Powered by Streamlit & Python<br>
+        Designed & Developed by <b>LOUIE B. IDULSA - PDBBM ITO I</b> • DSWD Field Office X
+    </div>
+    """, 
+    unsafe_allow_html=True
+)
