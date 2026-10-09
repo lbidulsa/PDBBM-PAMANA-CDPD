@@ -849,27 +849,27 @@ elif selected_view == "Geotagged_Photos":
     st.dataframe(df_photos, use_container_width=True)
 
 # ---------------------------------------------------------
-# 8. FINANCE MODULE (SINGLE SHEET: MONITORING EVALUATION REPORT)
+# 8. FINANCE MODULE (DIRECT PREVIEW EMBED - NO PUBLISH REQUIRED)
 # ---------------------------------------------------------
 elif selected_view == "Finance":
     st.subheader("💰 Finance - Monitoring Evaluation Report")
     st.caption("Live Synchronization Viewer • Official Executive Finance Tracking")
 
-    # Full Spreadsheet Edit Link for Button
+    # Full Spreadsheet Edit Link
     sheet_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/edit?usp=sharing"
     
-    # Direct Published Sheet Viewer Link with Single Sheet Parameter (Monitoring Evaluation Report Sheet)
-    embed_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/pubhtml?gid=1285370211&single=true&widget=false&headers=false"
+    # Preview Embed Link (Gumagana kahit hindi naka-Publish to Web, basta Public/Viewable ang Share Link)
+    embed_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/preview?rm=minimal#gid=1285370211"
 
     c_f1, c_f2 = st.columns([3, 1])
     with c_f1:
-        st.info("📊 **Monitoring Evaluation Report**: Gi-isolate ug gi-display lang ang KANI nga specific sheet.")
+        st.info("📊 **Monitoring Evaluation Report**: Live embedded spreadsheet viewer.")
     with c_f2:
         st.link_button("🔗 Open Full Google Sheet", sheet_url, use_container_width=True)
 
     st.markdown("---")
 
-    # Embed Single Sheet Viewer (Nawala na ang laing tabs sa ubos)
+    # Embed Preview Viewer
     st.markdown(
         f"""
         <iframe src="{embed_url}" 
