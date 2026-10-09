@@ -7,6 +7,10 @@ import os
 import random
 import string
 import datetime
+import secrets
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Attempt browser GPS if available
 try:
@@ -116,6 +120,50 @@ if hasattr(st, "dialog"):
     if not st.session_state["privacy_accepted"]:
         privacy_modal()
 
+# HELPER: GENERATE RANDOM PASSWORDS
+def generate_random_password(length=10):
+    chars = string.ascii_letters + string.digits + "!@#$%&*"
+    return ''.join(secrets.choice(chars) for _ in range(length))
+
+# HELPER: EMAIL SENDER VIA SMTP
+def send_credentials_email(recipient_email, recipient_name, temp_password):
+    sender_email = os.environ.get("SMTP_EMAIL", "lbidulsa.fo10@dswd.gov.ph")
+    sender_password = os.environ.get("SMTP_PASSWORD", "")
+    
+    if not sender_password:
+        return False, "SMTP Password not configured in environment variables."
+        
+    try:
+        msg = MIMEMultipart()
+        msg['From'] = f"PAMANA CDPD Portal <{sender_email}>"
+        msg['To'] = recipient_email
+        msg['Subject'] = "PAMANA CDPD Portal Account Credentials"
+        
+        body = f"""
+Hello {recipient_name},
+
+Your user account for the PAMANA CDPD Peace & Development Management System has been configured.
+
+Login Email Address: {recipient_email}
+Temporary Password: {temp_password}
+
+Please login at the PAMANA CDPD System Portal and change your temporary password upon first access.
+
+Best regards,
+PAMANA System Administrator
+DSWD Field Office X
+        """
+        msg.attach(MIMEText(body, 'plain'))
+        
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.send_message(msg)
+        server.quit()
+        return True, "Email sent successfully!"
+    except Exception as e:
+        return False, str(e)
+
 def get_logo_path():
     if os.path.exists("logo.png"):
         return "logo.png"
@@ -180,6 +228,28 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
+    # User Accounts Table (SCMS Standard)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT,
+            email TEXT UNIQUE,
+            password TEXT,
+            user_role TEXT,
+            require_change_pass INTEGER DEFAULT 0
+        )
+    """)
+
+    # Default Superuser Account Creation/Sync
+    SUPERUSER_EMAIL = "lbidulsa.fo10@dswd.gov.ph"
+    SUPERUSER_PASS = "P@ssw0rd"
+    
+    cursor.execute("SELECT COUNT(*) FROM user_accounts WHERE lower(email) = lower(?)", (SUPERUSER_EMAIL,))
+    if cursor.fetchone()[0] == 0:
+        cursor.execute("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES ('System Administrator', ?, ?, 'Superuser', 0)", (SUPERUSER_EMAIL, SUPERUSER_PASS))
+    else:
+        cursor.execute("UPDATE user_accounts SET password = ?, user_role = 'Superuser' WHERE lower(email) = lower(?)", (SUPERUSER_PASS, SUPERUSER_EMAIL))
+
     # CEAC Municipal Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS CEAC_Municipal (
@@ -315,33 +385,18 @@ def load_db_table(table_name):
     return df
 
 # ---------------------------------------------------------
-# 2. USER AUTHENTICATION & LOGIN PORTAL WITH RESET PASSWORD
+# 2. LOGIN PORTAL & FORGOT/RESET PASSWORD
 # ---------------------------------------------------------
-if "users" not in st.session_state:
-    st.session_state["users"] = {
-        "superuser": {
-            "password": "superuser123",
-            "role": "Superuser",
-            "name": "System Administrator",
-            "email": "superuser@pamana.gov.ph"
-        },
-        "admin": {
-            "password": "admin123",
-            "role": "Admin",
-            "name": "Program Admin",
-            "email": "admin@pamana.gov.ph"
-        }
-    }
-
 if "logged_in" not in st.session_state:
     st.session_state["logged_in"] = False
-    st.session_state["username"] = None
+    st.session_state["user_email"] = None
     st.session_state["user_role"] = None
     st.session_state["user_name"] = None
+    st.session_state["must_change_pass"] = False
 
 if "reset_otp" not in st.session_state:
     st.session_state["reset_otp"] = None
-    st.session_state["reset_user"] = None
+    st.session_state["reset_user_email"] = None
 
 def login():
     st.markdown("<br>", unsafe_allow_html=True)
@@ -360,38 +415,46 @@ def login():
         
         with auth_tab1:
             with st.form("login_form"):
-                username = st.text_input("Username").strip().lower()
-                password = st.text_input("Password", type="password")
+                login_email = st.text_input("Email Address").strip()
+                login_pass = st.text_input("Password", type="password")
                 submit = st.form_submit_button("🔑 Login to Dashboard", use_container_width=True)
                 
                 if submit:
-                    users = st.session_state["users"]
-                    if username in users and users[username]["password"] == password:
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT id, full_name, email, password, user_role, require_change_pass FROM user_accounts WHERE lower(email) = lower(?) AND password = ?", (login_email, login_pass))
+                    u_res = cursor.fetchone()
+                    conn.close()
+
+                    if u_res:
                         st.session_state["logged_in"] = True
-                        st.session_state["username"] = username
-                        st.session_state["user_role"] = users[username]["role"]
-                        st.session_state["user_name"] = users[username]["name"]
-                        st.success(f"Welcome back, {users[username]['name']}!")
+                        st.session_state["user_email"] = u_res["email"]
+                        st.session_state["user_role"] = u_res["user_role"]
+                        st.session_state["user_name"] = u_res["full_name"]
+                        st.session_state["must_change_pass"] = bool(u_res["require_change_pass"])
+                        st.success(f"Welcome back, {u_res['full_name']}!")
                         st.rerun()
                     else:
-                        st.error("Invalid Username or Password!")
+                        st.error("Invalid Email Address or Password!")
 
         with auth_tab2:
             st.markdown("##### 🔑 Request Password Reset Verification Code")
             reset_email = st.text_input("Enter Registered Email Address:")
             
             if st.button("📩 Send Code via Email", use_container_width=True):
-                found_user = None
-                for u, details in st.session_state["users"].items():
-                    if details["email"].lower() == reset_email.strip().lower():
-                        found_user = u
-                        break
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT full_name, email FROM user_accounts WHERE lower(email) = lower(?)", (reset_email.strip(),))
+                found_user = cursor.fetchone()
+                conn.close()
                 
                 if found_user:
                     otp = "".join(random.choices(string.digits, k=6))
                     st.session_state["reset_otp"] = otp
-                    st.session_state["reset_user"] = found_user
-                    st.success(f"Reset Verification Code has been dispatched to {reset_email}!")
+                    st.session_state["reset_user_email"] = found_user["email"]
+                    
+                    sent_ok, msg_res = send_credentials_email(found_user["email"], found_user["full_name"], f"Reset OTP: {otp}")
+                    st.success(f"Reset Verification Code has been dispatched to {found_user['email']}!")
                     st.info(f"📬 [SYSTEM NOTIFICATION]: Your 6-digit Verification Reset Code is: **{otp}**")
                 else:
                     st.error("No account associated with the provided email address!")
@@ -406,11 +469,16 @@ def login():
                 if st.button("💾 Save New Password", use_container_width=True):
                     if entered_otp == st.session_state["reset_otp"]:
                         if new_pass and new_pass == confirm_pass:
-                            user_to_update = st.session_state["reset_user"]
-                            st.session_state["users"][user_to_update]["password"] = new_pass
+                            u_email = st.session_state["reset_user_email"]
+                            conn = get_db_connection()
+                            cursor = conn.cursor()
+                            cursor.execute("UPDATE user_accounts SET password = ?, require_change_pass = 0 WHERE lower(email) = lower(?)", (new_pass, u_email))
+                            conn.commit()
+                            conn.close()
+                            
                             st.success("Password updated successfully! You may now proceed to login.")
                             st.session_state["reset_otp"] = None
-                            st.session_state["reset_user"] = None
+                            st.session_state["reset_user_email"] = None
                         else:
                             st.error("Passwords do not match or field is empty!")
                     else:
@@ -419,6 +487,34 @@ def login():
 if not st.session_state["logged_in"]:
     login()
     st.stop()
+
+# ---------------------------------------------------------
+# MANDATORY FIRST-LOGIN CHANGE PASSWORD MODAL
+# ---------------------------------------------------------
+if st.session_state.get("must_change_pass"):
+    if hasattr(st, "dialog"):
+        @st.dialog("🔑 MANDATORY PASSWORD CHANGE REQUIRED")
+        def change_password_modal():
+            st.warning("⚠️ You are currently using a temporary password. Please configure your new custom password to proceed.")
+            with st.form("must_change_pass_form"):
+                new_p1 = st.text_input("New Password*", type="password")
+                new_p2 = st.text_input("Confirm New Password*", type="password")
+                submit_chg = st.form_submit_button("💾 Save & Proceed to System", use_container_width=True)
+                
+                if submit_chg:
+                    if new_p1 and new_p1 == new_p2:
+                        conn = get_db_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("UPDATE user_accounts SET password = ?, require_change_pass = 0 WHERE lower(email) = lower(?)", (new_p1, st.session_state["user_email"]))
+                        conn.commit()
+                        conn.close()
+                        st.session_state["must_change_pass"] = False
+                        st.success("✅ Password changed successfully!")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ Passwords do not match or field is empty.")
+        change_password_modal()
+        st.stop()
 
 # ---------------------------------------------------------
 # 3. GLOBAL CONFIGURATIONS & ACTIVITIES LISTS
@@ -500,11 +596,12 @@ if logo_file:
     st.sidebar.image(logo_file, width=220)
 
 st.sidebar.markdown(f"**Logged User:** {st.session_state['user_name']}")
+st.sidebar.markdown(f"**Email:** `{st.session_state['user_email']}`")
 st.sidebar.markdown(f"**System Role:** <span class='role-badge'>{st.session_state['user_role']}</span>", unsafe_allow_html=True)
 
 if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state["logged_in"] = False
-    st.session_state["username"] = None
+    st.session_state["user_email"] = None
     st.session_state["user_role"] = None
     st.session_state["user_name"] = None
     st.rerun()
@@ -590,38 +687,98 @@ if selected_view == "Executive Dashboard":
 # ---------------------------------------------------------
 elif selected_view == "User Management Portal":
     st.subheader("👤 System User Management Portal")
+    if "gen_temp_pass" not in st.session_state:
+        st.session_state["gen_temp_pass"] = generate_random_password()
     
-    if st.session_state["user_role"] == "Superuser":
-        with st.expander("➕ Add New System User", expanded=True):
+    col_u1, col_u2 = st.columns(2)
+    
+    with col_u1:
+        if st.session_state["user_role"] == "Superuser":
+            st.markdown("##### ➕ Add New System User")
             with st.form("add_user_form", clear_on_submit=True):
-                col_u1, col_u2 = st.columns(2)
-                with col_u1:
-                    new_uname = st.text_input("Username").strip().lower()
-                    new_fullname = st.text_input("Full Name")
-                    new_email = st.text_input("Email Address")
-                with col_u2:
-                    new_pass = st.text_input("Password", type="password")
-                    new_role = st.selectbox("Assigned Role", ["Admin", "Superuser"])
+                new_fullname = st.text_input("Full Name*")
+                new_email = st.text_input("User Email Address*").strip()
+                new_role = st.selectbox("Assigned Role", ["Admin", "Superuser"])
                 
-                submit_user = st.form_submit_button("💾 Create User Account")
+                st.text_input("Generated Temporary Password:", value=st.session_state["gen_temp_pass"], disabled=True)
+                send_via_email = st.checkbox("📧 Send Credentials via Direct Email to User", value=True)
+                
+                submit_user = st.form_submit_button("💾 Create User Account", use_container_width=True)
                 if submit_user:
-                    if new_uname and new_pass and new_email:
-                        if new_uname in st.session_state["users"]:
-                            st.error("Username already registered!")
-                        else:
-                            st.session_state["users"][new_uname] = {
-                                "password": new_pass, "role": new_role,
-                                "name": new_fullname, "email": new_email
-                            }
-                            st.success(f"User '{new_fullname}' ({new_role}) created successfully!")
+                    if new_fullname and new_email:
+                        try:
+                            conn = get_db_connection()
+                            cursor = conn.cursor()
+                            cursor.execute("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (?, ?, ?, ?, 1)", (new_fullname, new_email, st.session_state["gen_temp_pass"], new_role))
+                            conn.commit()
+                            conn.close()
+                            
+                            st.success(f"User '{new_fullname}' registered successfully!")
+                            
+                            if send_via_email:
+                                sent_ok, msg_res = send_credentials_email(new_email, new_fullname, st.session_state["gen_temp_pass"])
+                                if sent_ok:
+                                    st.success("📩 Account credentials emailed directly to user!")
+                                else:
+                                    st.info(f"ℹ️ Saved locally. Note: {msg_res}")
+                                    
+                            st.session_state["gen_temp_pass"] = generate_random_password()
                             st.rerun()
+                        except sqlite3.IntegrityError:
+                            st.error("⚠️ Email address already registered!")
                     else:
-                        st.error("Please fill in Username, Password, and Email.")
+                        st.error("Please fill in Full Name and Email Address.")
+
+    with col_u2:
+        if st.session_state["user_role"] == "Superuser":
+            st.markdown("##### 🔑 Reset User Password (with Live Search)")
+            user_search = st.text_input("🔍 Search User Name or Email:")
+            
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            query_u = "SELECT id, full_name, email FROM user_accounts WHERE user_role != 'Superuser'"
+            params_u = []
+            
+            if user_search:
+                query_u += " AND (lower(full_name) LIKE lower(?) OR lower(email) LIKE lower(?))"
+                p_term = f"%{user_search.strip()}%"
+                params_u.extend([p_term, p_term])
+                
+            cursor.execute(query_u, params_u)
+            u_list = cursor.fetchall()
+            conn.close()
+            
+            if u_list:
+                u_dict = {f"{r['full_name']} ({r['email']})": (r['id'], r['email'], r['full_name']) for r in u_list}
+                selected_reset = st.selectbox("Select Filtered User Account:", list(u_dict.keys()))
+                send_reset_mail = st.checkbox("📧 Email New Password Directly to User", value=True, key="rst_m_chk")
+                
+                if st.button("🔄 Reset Password Now", use_container_width=True):
+                    r_id, r_email, r_name = u_dict[selected_reset]
+                    new_temp = generate_random_password()
+                    
+                    conn = get_db_connection()
+                    cursor = conn.cursor()
+                    cursor.execute("UPDATE user_accounts SET password = ?, require_change_pass = 1 WHERE id = ?", (new_temp, r_id))
+                    conn.commit()
+                    conn.close()
+                    
+                    st.success(f"✅ New Temporary Password for {r_email}: `{new_temp}`")
+                    if send_reset_mail:
+                        sent_ok, msg_res = send_credentials_email(r_email, r_name, new_temp)
+                        if sent_ok:
+                            st.success("📩 Reset password emailed directly to user!")
+                        else:
+                            st.info(f"ℹ️ Reset locally. Note: {msg_res}")
+            else:
+                st.info("No matching users found.")
 
     st.markdown("---")
     st.subheader("📋 Registered Users Masterlist")
-    users_data = [{"Username": u, "Full Name": i["name"], "Role": i["role"], "Email": i["email"]} for u, i in st.session_state["users"].items()]
-    st.dataframe(pd.DataFrame(users_data), use_container_width=True)
+    df_users = load_db_table("user_accounts")
+    if not df_users.empty and "password" in df_users.columns:
+        df_users = df_users.drop(columns=["password"])
+    st.dataframe(df_users, use_container_width=True, hide_index=True)
 
 # ---------------------------------------------------------
 # 7. GEOTAGGED PHOTOS MODULE WITH AUTO-GPS DETECT
@@ -693,11 +850,7 @@ elif selected_view == "Finance":
     # Full Spreadsheet Edit Link for Button
     sheet_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/edit?usp=sharing"
     
-    # Specific Single Sheet Publish Embed Link (Hides all other tabs)
-    # Target: MONITORING EVALUATION REPORT tab only (gid=1285370211)
-    embed_single_sheet_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT1-GyrIYW_placeholder/pubhtml?gid=1285370211&single=true&widget=false&headers=false"
-    
-    # Direct Published Sheet Viewer Link with Single Sheet Parameter
+    # Direct Published Sheet Viewer Link with Single Sheet Parameter (Monitoring Evaluation Report Sheet)
     embed_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/pubhtml?gid=1285370211&single=true&widget=false&headers=false"
 
     c_f1, c_f2 = st.columns([3, 1])
