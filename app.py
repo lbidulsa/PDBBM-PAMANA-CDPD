@@ -683,12 +683,15 @@ if selected_view == "Executive Dashboard":
             st.info("No beneficiary records found.")
 
 # ---------------------------------------------------------
-# 6. USER MANAGEMENT PORTAL
+# 6. USER MANAGEMENT PORTAL WITH EXPANDED ROLES & VISIBLE PASSWORDS
 # ---------------------------------------------------------
 elif selected_view == "User Management Portal":
     st.subheader("👤 System User Management Portal")
     if "gen_temp_pass" not in st.session_state:
         st.session_state["gen_temp_pass"] = generate_random_password()
+    
+    # Updated User Roles List
+    USER_ROLES_LIST = ["Superuser", "Admin", "AC", "TF", "MFA", "MDM"]
     
     col_u1, col_u2 = st.columns(2)
     
@@ -698,9 +701,10 @@ elif selected_view == "User Management Portal":
             with st.form("add_user_form", clear_on_submit=True):
                 new_fullname = st.text_input("Full Name*")
                 new_email = st.text_input("User Email Address*").strip()
-                new_role = st.selectbox("Assigned Role", ["Admin", "Superuser"])
+                new_role = st.selectbox("Assigned Role*", USER_ROLES_LIST)
                 
-                st.text_input("Generated Temporary Password:", value=st.session_state["gen_temp_pass"], disabled=True)
+                curr_temp_pass = st.session_state["gen_temp_pass"]
+                st.text_input("Generated Temporary Password (Auto):", value=curr_temp_pass, disabled=True)
                 send_via_email = st.checkbox("📧 Send Credentials via Direct Email to User", value=True)
                 
                 submit_user = st.form_submit_button("💾 Create User Account", use_container_width=True)
@@ -709,18 +713,21 @@ elif selected_view == "User Management Portal":
                         try:
                             conn = get_db_connection()
                             cursor = conn.cursor()
-                            cursor.execute("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (?, ?, ?, ?, 1)", (new_fullname, new_email, st.session_state["gen_temp_pass"], new_role))
+                            cursor.execute("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (?, ?, ?, ?, 1)", (new_fullname, new_email, curr_temp_pass, new_role))
                             conn.commit()
                             conn.close()
                             
-                            st.success(f"User '{new_fullname}' registered successfully!")
+                            st.success(f"✅ User '{new_fullname}' ({new_role}) successfully created!")
+                            
+                            # POP-UP / ALERT SHOWING THE TEMPORARY PASSWORD IMMEDIATELY
+                            st.warning(f"🔑 **TEMPORARY PASSWORD FOR {new_email}:** `{curr_temp_pass}`\n\n*(Palihug i-copy kini kung sakaling dili ma-deliver ang email!)*")
                             
                             if send_via_email:
-                                sent_ok, msg_res = send_credentials_email(new_email, new_fullname, st.session_state["gen_temp_pass"])
+                                sent_ok, msg_res = send_credentials_email(new_email, new_fullname, curr_temp_pass)
                                 if sent_ok:
                                     st.success("📩 Account credentials emailed directly to user!")
                                 else:
-                                    st.info(f"ℹ️ Saved locally. Note: {msg_res}")
+                                    st.info(f"ℹ️ Email notification status: {msg_res}")
                                     
                             st.session_state["gen_temp_pass"] = generate_random_password()
                             st.rerun()
@@ -736,11 +743,11 @@ elif selected_view == "User Management Portal":
             
             conn = get_db_connection()
             cursor = conn.cursor()
-            query_u = "SELECT id, full_name, email FROM user_accounts WHERE user_role != 'Superuser'"
+            query_u = "SELECT id, full_name, email, user_role FROM user_accounts"
             params_u = []
             
             if user_search:
-                query_u += " AND (lower(full_name) LIKE lower(?) OR lower(email) LIKE lower(?))"
+                query_u += " WHERE (lower(full_name) LIKE lower(?) OR lower(email) LIKE lower(?))"
                 p_term = f"%{user_search.strip()}%"
                 params_u.extend([p_term, p_term])
                 
@@ -749,7 +756,7 @@ elif selected_view == "User Management Portal":
             conn.close()
             
             if u_list:
-                u_dict = {f"{r['full_name']} ({r['email']})": (r['id'], r['email'], r['full_name']) for r in u_list}
+                u_dict = {f"{r['full_name']} ({r['email']}) - [{r['user_role']}]": (r['id'], r['email'], r['full_name']) for r in u_list}
                 selected_reset = st.selectbox("Select Filtered User Account:", list(u_dict.keys()))
                 send_reset_mail = st.checkbox("📧 Email New Password Directly to User", value=True, key="rst_m_chk")
                 
@@ -764,12 +771,14 @@ elif selected_view == "User Management Portal":
                     conn.close()
                     
                     st.success(f"✅ New Temporary Password for {r_email}: `{new_temp}`")
+                    st.warning("*(I-copy kini ug i-send sa user kung dili moabot sa iyang email inbox!)*")
+                    
                     if send_reset_mail:
                         sent_ok, msg_res = send_credentials_email(r_email, r_name, new_temp)
                         if sent_ok:
                             st.success("📩 Reset password emailed directly to user!")
                         else:
-                            st.info(f"ℹ️ Reset locally. Note: {msg_res}")
+                            st.info(f"ℹ️ Email notification status: {msg_res}")
             else:
                 st.info("No matching users found.")
 
@@ -779,7 +788,6 @@ elif selected_view == "User Management Portal":
     if not df_users.empty and "password" in df_users.columns:
         df_users = df_users.drop(columns=["password"])
     st.dataframe(df_users, use_container_width=True, hide_index=True)
-
 # ---------------------------------------------------------
 # 7. GEOTAGGED PHOTOS MODULE WITH AUTO-GPS DETECT
 # ---------------------------------------------------------
