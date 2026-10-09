@@ -90,6 +90,32 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# ---------------------------------------------------------
+# DATA PRIVACY ACT (RA 10173) AUTOMATIC POP-UP MODAL
+# ---------------------------------------------------------
+if "privacy_accepted" not in st.session_state:
+    st.session_state["privacy_accepted"] = False
+
+if hasattr(st, "dialog"):
+    @st.dialog("🔒 DATA PRIVACY ACT COMPLIANCE REMINDER (RA 10173)")
+    def privacy_modal():
+        st.markdown("""
+        **DSWD FIELD OFFICE X • PAMANA PEACE & DEVELOPMENT PROGRAM**
+        
+        Pursuant to **Republic Act No. 10173 (Data Privacy Act of 2012)**:
+        
+        1. **Authorized Access Only:** This system contains official program records, CEAC activity logs, and financial disbursements.
+        2. **Confidentiality Notice:** Any unauthorized extraction, downloading, or distribution of internal records is strictly prohibited.
+        3. **Audit Trail:** All encoding sessions, file uploads, and data entries are timestamped and logged under registered user credentials.
+        """)
+        st.divider()
+        if st.button("✅ I Agree & Proceed to Portal", use_container_width=True):
+            st.session_state["privacy_accepted"] = True
+            st.rerun()
+
+    if not st.session_state["privacy_accepted"]:
+        privacy_modal()
+
 def get_logo_path():
     if os.path.exists("logo.png"):
         return "logo.png"
