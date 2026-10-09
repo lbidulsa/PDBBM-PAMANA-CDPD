@@ -469,7 +469,8 @@ TABS = [
     "Geotagged_Photos",
     "Disbursement",
     "Sub_Project_Closeout_Tracker",
-    "Summary"
+    "Summary",
+    "Finance"
 ]
 
 # Helper function to save single uploaded file
@@ -683,7 +684,38 @@ elif selected_view == "Geotagged_Photos":
     st.dataframe(df_photos, use_container_width=True)
 
 # ---------------------------------------------------------
-# 8. CEAC MUNICIPAL, BARANGAY, DISBURSEMENT & CLOSEOUT TRACKER MODULES
+# 8. FINANCE MODULE (MONITORING EVALUATION REPORT EMBED)
+# ---------------------------------------------------------
+elif selected_view == "Finance":
+    st.subheader("💰 Finance - Monitoring & Evaluation Report")
+    st.caption("Live Synchronization Viewer • PAMANA Peace & Development Executive Finance Tracking")
+
+    sheet_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/edit?usp=sharing&ouid=103460882842537051893&rtpof=true&sd=true"
+    embed_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/htmlembed?widget=true&headers=false"
+
+    c_f1, c_f2 = st.columns([3, 1])
+    with c_f1:
+        st.info("📊 **Monitoring Evaluation Report**: Live read-only embedded spreadsheet.")
+    with c_f2:
+        st.link_button("🔗 Open Google Sheets in New Tab", sheet_url, use_container_width=True)
+
+    st.markdown("---")
+
+    # Embed Live Google Sheet Viewer
+    st.markdown(
+        f"""
+        <iframe src="{embed_url}" 
+                width="100%" 
+                height="750" 
+                style="border: 1px solid #CBD5E1; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);" 
+                allowfullscreen>
+        </iframe>
+        """, 
+        unsafe_allow_html=True
+    )
+
+# ---------------------------------------------------------
+# 9. CEAC MUNICIPAL, BARANGAY, DISBURSEMENT & CLOSEOUT TRACKER MODULES
 # ---------------------------------------------------------
 else:
     st.subheader(f"📋 Data Management & Encoding: {selected_view}")
