@@ -120,40 +120,51 @@ if hasattr(st, "dialog"):
     if not st.session_state["privacy_accepted"]:
         privacy_modal()
 
-# HELPER: GENERATE RANDOM PASSWORDS
+# HELPER: GENERATE SECURE RANDOM PASSWORDS
 def generate_random_password(length=10):
     chars = string.ascii_letters + string.digits + "!@#$%&*"
     return ''.join(secrets.choice(chars) for _ in range(length))
 
-# HELPER: EMAIL SENDER VIA SMTP
-def send_credentials_email(recipient_email, recipient_name, temp_password):
+# HELPER: EMAIL SENDER VIA SMTP (PROFESSIONAL DISPATCH)
+def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User"):
     sender_email = os.environ.get("SMTP_EMAIL", "lbidulsa.fo10@dswd.gov.ph")
     sender_password = os.environ.get("SMTP_PASSWORD", "")
     
     if not sender_password:
-        return False, "SMTP Password not configured in environment variables."
+        return False, "SMTP Password not configured in system environment variables."
         
     try:
-        msg = MIMEMultipart()
-        msg['From'] = f"PAMANA CDPD Portal <{sender_email}>"
+        msg = MIMEMultipart('alternative')
+        msg['From'] = f"DSWD FO X PAMANA CDPD System <{sender_email}>"
         msg['To'] = recipient_email
-        msg['Subject'] = "PAMANA CDPD Portal Account Credentials"
+        msg['Subject'] = "🔒 Official Account Credentials - PAMANA CDPD Portal"
         
-        body = f"""
-Hello {recipient_name},
+        html_body = f"""
+        <html>
+          <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333333;">
+            <div style="max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #1F4E78; border-radius: 8px;">
+              <h2 style="color: #1F4E78; text-align: center;">🕊️ DSWD Field Office X - PAMANA CDPD System</h2>
+              <hr style="border: 0; border-top: 1px solid #1F4E78;">
+              <p>Dear <b>{recipient_name}</b>,</p>
+              <p>Your official user account for the <b>PAMANA Peace & Development Management System</b> has been successfully configured.</p>
+              
+              <div style="background-color: #F4F6F9; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #1F4E78;">
+                <p style="margin: 5px 0;"><b>Login Email:</b> <code style="font-size: 1.1em; color: #1F4E78;">{recipient_email}</code></p>
+                <p style="margin: 5px 0;"><b>Assigned Role:</b> {user_role}</p>
+                <p style="margin: 5px 0;"><b>Temporary Password:</b> <code style="font-size: 1.2em; color: #C53030; font-weight: bold;">{temp_password}</code></p>
+              </div>
 
-Your user account for the PAMANA CDPD Peace & Development Management System has been configured.
-
-Login Email Address: {recipient_email}
-Temporary Password: {temp_password}
-
-Please login at the PAMANA CDPD System Portal and change your temporary password upon first access.
-
-Best regards,
-PAMANA System Administrator
-DSWD Field Office X
+              <p><b>Security Notice:</b> Please login to the PAMANA CDPD Portal and change your temporary password upon first system access.</p>
+              <br>
+              <p style="font-size: 0.85em; color: #6c757d; text-align: center;">
+                <i>This is an automated system dispatch. Please do not reply directly to this email.</i><br>
+                <b>DSWD FO X Peace & Development Program © 2026</b>
+              </p>
+            </div>
+          </body>
+        </html>
         """
-        msg.attach(MIMEText(body, 'plain'))
+        msg.attach(MIMEText(html_body, 'html'))
         
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
@@ -228,7 +239,7 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # User Accounts Table (SCMS Standard)
+    # User Accounts Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -444,7 +455,7 @@ def login():
             if st.button("📩 Send Code via Email", use_container_width=True):
                 conn = get_db_connection()
                 cursor = conn.cursor()
-                cursor.execute("SELECT full_name, email FROM user_accounts WHERE lower(email) = lower(?)", (reset_email.strip(),))
+                cursor.execute("SELECT full_name, email, user_role FROM user_accounts WHERE lower(email) = lower(?)", (reset_email.strip(),))
                 found_user = cursor.fetchone()
                 conn.close()
                 
@@ -453,9 +464,12 @@ def login():
                     st.session_state["reset_otp"] = otp
                     st.session_state["reset_user_email"] = found_user["email"]
                     
-                    sent_ok, msg_res = send_credentials_email(found_user["email"], found_user["full_name"], f"Reset OTP: {otp}")
-                    st.success(f"Reset Verification Code has been dispatched to {found_user['email']}!")
-                    st.info(f"📬 [SYSTEM NOTIFICATION]: Your 6-digit Verification Reset Code is: **{otp}**")
+                    sent_ok, msg_res = send_credentials_email(found_user["email"], found_user["full_name"], otp, found_user["user_role"])
+                    if sent_ok:
+                        st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user['email']}!")
+                    else:
+                        st.warning(f"⚠️ Email dispatch status: {msg_res}")
+                        st.info(f"📬 [SYSTEM BACKUP RESET CODE]: Your Verification Reset Code is: **{otp}**")
                 else:
                     st.error("No account associated with the provided email address!")
 
@@ -683,20 +697,19 @@ if selected_view == "Executive Dashboard":
             st.info("No beneficiary records found.")
 
 # ---------------------------------------------------------
-# 6. USER MANAGEMENT PORTAL WITH EXPANDED ROLES & VISIBLE PASSWORDS
+# 6. USER MANAGEMENT PORTAL
 # ---------------------------------------------------------
 elif selected_view == "User Management Portal":
     st.subheader("👤 System User Management Portal")
     if "gen_temp_pass" not in st.session_state:
         st.session_state["gen_temp_pass"] = generate_random_password()
     
-    # Updated User Roles List
     USER_ROLES_LIST = ["Superuser", "Admin", "AC", "TF", "MFA", "MDM"]
     
     col_u1, col_u2 = st.columns(2)
     
     with col_u1:
-        if st.session_state["user_role"] == "Superuser":
+        if st.session_state["user_role"] in ["Superuser", "Admin"]:
             st.markdown("##### ➕ Add New System User")
             with st.form("add_user_form", clear_on_submit=True):
                 new_fullname = st.text_input("Full Name*")
@@ -719,15 +732,15 @@ elif selected_view == "User Management Portal":
                             
                             st.success(f"✅ User '{new_fullname}' ({new_role}) successfully created!")
                             
-                            # POP-UP / ALERT SHOWING THE TEMPORARY PASSWORD IMMEDIATELY
-                            st.warning(f"🔑 **TEMPORARY PASSWORD FOR {new_email}:** `{curr_temp_pass}`\n\n*(Palihug i-copy kini kung sakaling dili ma-deliver ang email!)*")
-                            
                             if send_via_email:
-                                sent_ok, msg_res = send_credentials_email(new_email, new_fullname, curr_temp_pass)
+                                sent_ok, msg_res = send_credentials_email(new_email, new_fullname, curr_temp_pass, new_role)
                                 if sent_ok:
-                                    st.success("📩 Account credentials emailed directly to user!")
+                                    st.success(f"📩 Account credentials emailed directly to {new_email}!")
                                 else:
-                                    st.info(f"ℹ️ Email notification status: {msg_res}")
+                                    st.warning(f"⚠️ Email dispatch status: {msg_res}")
+                                    st.info(f"🔑 **BACKUP DISPLAY PASS:** `{curr_temp_pass}`")
+                            else:
+                                st.info(f"🔑 **USER TEMPORARY PASS:** `{curr_temp_pass}`")
                                     
                             st.session_state["gen_temp_pass"] = generate_random_password()
                             st.rerun()
@@ -737,17 +750,17 @@ elif selected_view == "User Management Portal":
                         st.error("Please fill in Full Name and Email Address.")
 
     with col_u2:
-        if st.session_state["user_role"] == "Superuser":
+        if st.session_state["user_role"] in ["Superuser", "Admin"]:
             st.markdown("##### 🔑 Reset User Password (with Live Search)")
             user_search = st.text_input("🔍 Search User Name or Email:")
             
             conn = get_db_connection()
             cursor = conn.cursor()
-            query_u = "SELECT id, full_name, email, user_role FROM user_accounts"
+            query_u = "SELECT id, full_name, email, user_role FROM user_accounts WHERE user_role != 'Superuser'"
             params_u = []
             
             if user_search:
-                query_u += " WHERE (lower(full_name) LIKE lower(?) OR lower(email) LIKE lower(?))"
+                query_u += " AND (lower(full_name) LIKE lower(?) OR lower(email) LIKE lower(?))"
                 p_term = f"%{user_search.strip()}%"
                 params_u.extend([p_term, p_term])
                 
@@ -756,12 +769,12 @@ elif selected_view == "User Management Portal":
             conn.close()
             
             if u_list:
-                u_dict = {f"{r['full_name']} ({r['email']}) - [{r['user_role']}]": (r['id'], r['email'], r['full_name']) for r in u_list}
+                u_dict = {f"{r['full_name']} ({r['email']}) - [{r['user_role']}]": (r['id'], r['email'], r['full_name'], r['user_role']) for r in u_list}
                 selected_reset = st.selectbox("Select Filtered User Account:", list(u_dict.keys()))
                 send_reset_mail = st.checkbox("📧 Email New Password Directly to User", value=True, key="rst_m_chk")
                 
                 if st.button("🔄 Reset Password Now", use_container_width=True):
-                    r_id, r_email, r_name = u_dict[selected_reset]
+                    r_id, r_email, r_name, r_role = u_dict[selected_reset]
                     new_temp = generate_random_password()
                     
                     conn = get_db_connection()
@@ -770,15 +783,17 @@ elif selected_view == "User Management Portal":
                     conn.commit()
                     conn.close()
                     
-                    st.success(f"✅ New Temporary Password for {r_email}: `{new_temp}`")
-                    st.warning("*(I-copy kini ug i-send sa user kung dili moabot sa iyang email inbox!)*")
+                    st.success(f"✅ Reset Password initiated for {r_email}!")
                     
                     if send_reset_mail:
-                        sent_ok, msg_res = send_credentials_email(r_email, r_name, new_temp)
+                        sent_ok, msg_res = send_credentials_email(r_email, r_name, new_temp, r_role)
                         if sent_ok:
-                            st.success("📩 Reset password emailed directly to user!")
+                            st.success(f"📩 Reset password emailed directly to {r_email}!")
                         else:
-                            st.info(f"ℹ️ Email notification status: {msg_res}")
+                            st.warning(f"⚠️ Email dispatch status: {msg_res}")
+                            st.info(f"🔑 **BACKUP RESET PASS:** `{new_temp}`")
+                    else:
+                        st.info(f"🔑 **NEW TEMPORARY PASS:** `{new_temp}`")
             else:
                 st.info("No matching users found.")
 
@@ -788,6 +803,7 @@ elif selected_view == "User Management Portal":
     if not df_users.empty and "password" in df_users.columns:
         df_users = df_users.drop(columns=["password"])
     st.dataframe(df_users, use_container_width=True, hide_index=True)
+
 # ---------------------------------------------------------
 # 7. GEOTAGGED PHOTOS MODULE WITH AUTO-GPS DETECT
 # ---------------------------------------------------------
@@ -849,16 +865,16 @@ elif selected_view == "Geotagged_Photos":
     st.dataframe(df_photos, use_container_width=True)
 
 # ---------------------------------------------------------
-# 8. FINANCE MODULE (SINGLE SHEET - PUBLISHED LINK)
+# 8. FINANCE MODULE (EXACT PUBLISHED LINK - SINGLE SHEET ISOLATED)
 # ---------------------------------------------------------
 elif selected_view == "Finance":
     st.subheader("💰 Finance - Monitoring Evaluation Report")
     st.caption("Live Synchronization Viewer • Official Executive Finance Tracking")
 
-    # Full Sheet Link para sa button
+    # Full Spreadsheet Edit Link for Button
     sheet_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/edit?usp=sharing"
     
-    # Imong exact published link nga gi-set array parameters para MATAGO ANG IBANG TABS
+    # Exact Published Link with widget=false (Matago ang tanan ibang tabs sa ubos)
     embed_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT51CpWr5YaWUkDCfJYmUCAFduSjlC8Nlbxqb2DGceLH2CuaQ9EIOva6HRVj5ikVQ/pubhtml?gid=1476863389&single=true&widget=false&headers=false"
 
     c_f1, c_f2 = st.columns([3, 1])
@@ -869,7 +885,7 @@ elif selected_view == "Finance":
 
     st.markdown("---")
 
-    # Embed Viewer
+    # Embed Single Sheet Viewer
     st.markdown(
         f"""
         <iframe src="{embed_url}" 
@@ -1123,10 +1139,10 @@ else:
         edited_df = st.data_editor(
             df_filtered,
             use_container_width=True,
-            num_rows="dynamic" if st.session_state["user_role"] == "Superuser" else "fixed",
+            num_rows="dynamic" if st.session_state["user_role"] in ["Superuser", "Admin"] else "fixed",
             key=f"editor_{selected_view}"
         )
-        if st.session_state["user_role"] == "Superuser" and st.button("💾 Sync Table Changes to Database"):
+        if st.session_state["user_role"] in ["Superuser", "Admin"] and st.button("💾 Sync Table Changes to Database"):
             conn = get_db_connection()
             edited_df.to_sql(selected_view, conn, if_exists="replace", index=False)
             conn.close()
