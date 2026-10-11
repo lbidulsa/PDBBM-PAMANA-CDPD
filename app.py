@@ -12,7 +12,6 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-# Attempt browser GPS if available
 try:
     from streamlit_js_eval import get_geolocation
     HAS_GEO_EVAL = True
@@ -61,7 +60,6 @@ st.markdown("""
         font-weight: 600;
         display: inline-block;
     }
-    /* Sidebar Styling */
     section[data-testid="stSidebar"] {
         background-color: #0F2A4A !important;
         color: #FFFFFF !important;
@@ -71,7 +69,6 @@ st.markdown("""
     section[data-testid="stSidebar"] .stRadio label {
         color: #E2E8F0 !important;
     }
-    /* High Visibility Logout Button */
     .stSidebar div.stButton > button {
         background-color: #E2E8F0 !important;
         color: #0F2A4A !important;
@@ -120,14 +117,11 @@ if hasattr(st, "dialog"):
     if not st.session_state["privacy_accepted"]:
         privacy_modal()
 
-# HELPER: GENERATE SECURE RANDOM PASSWORDS
 def generate_random_password(length=10):
     chars = string.ascii_letters + string.digits + "!@#$%&*"
     return ''.join(secrets.choice(chars) for _ in range(length))
 
-# HELPER: EMAIL SENDER VIA SMTP (DIRECTLY INJECTED APP PASSWORD)
 def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User"):
-    # Direct Injected Email Credentials
     sender_email = "lbidulsa.fo10@dswd.gov.ph"
     sender_password = "rkgqurmorpvfgktq"  # Google App Password without spaces
     
@@ -185,7 +179,6 @@ logo_file = get_logo_path()
 os.makedirs("uploaded_movs", exist_ok=True)
 os.makedirs("uploaded_photos", exist_ok=True)
 
-# EXIF GPS EXTRACTOR FUNCTION
 def extract_gps_from_image(image_file):
     try:
         img = Image.open(image_file)
@@ -237,7 +230,6 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # User Accounts Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -249,7 +241,6 @@ def init_db():
         )
     """)
 
-    # Default Superuser Account Creation/Sync
     SUPERUSER_EMAIL = "lbidulsa.fo10@dswd.gov.ph"
     SUPERUSER_PASS = "P@ssw0rd"
     
@@ -259,7 +250,6 @@ def init_db():
     else:
         cursor.execute("UPDATE user_accounts SET password = ?, user_role = 'Superuser' WHERE lower(email) = lower(?)", (SUPERUSER_PASS, SUPERUSER_EMAIL))
 
-    # CEAC Municipal Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS CEAC_Municipal (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -281,7 +271,6 @@ def init_db():
         )
     """)
     
-    # CEAC Barangay Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS CEAC_Barangay (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -304,7 +293,6 @@ def init_db():
         )
     """)
     
-    # Geotagged Photos Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Geotagged_Photos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -319,7 +307,6 @@ def init_db():
         )
     """)
     
-    # Disbursement Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Disbursement (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -339,7 +326,6 @@ def init_db():
         )
     """)
     
-    # Sub-Project Closeout Tracker Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Sub_Project_Closeout_Tracker (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -369,7 +355,6 @@ def init_db():
         )
     """)
     
-    # Summary Table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS Summary (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -581,7 +566,6 @@ TABS = [
     "Finance"
 ]
 
-# Helper function to save single uploaded file
 def save_uploaded_file(file_obj):
     if file_obj is not None:
         file_path = os.path.join("uploaded_movs", file_obj.name)
@@ -590,7 +574,6 @@ def save_uploaded_file(file_obj):
         return file_obj.name
     return ""
 
-# Helper function to save multiple uploaded files
 def save_multiple_files(files_list):
     saved_names = []
     if files_list:
@@ -618,11 +601,32 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state["user_name"] = None
     st.rerun()
 
+# SELF-SERVICE CHANGE PASSWORD EXPANDER IN SIDEBAR
+with st.sidebar.expander("🔑 Change My Password"):
+    with st.form("self_change_pass_pamana"):
+        old_p = st.text_input("Current Password*", type="password")
+        new_p1 = st.text_input("New Password*", type="password")
+        new_p2 = st.text_input("Confirm New Password*", type="password")
+        if st.form_submit_button("Update Password", use_container_width=True):
+            if new_p1 == new_p2 and new_p1 != "":
+                conn = get_db_connection()
+                cursor = conn.cursor()
+                cursor.execute("SELECT password FROM user_accounts WHERE lower(email) = lower(?)", (st.session_state["user_email"],))
+                res_p = cursor.fetchone()
+                if res_p and res_p["password"] == old_p:
+                    cursor.execute("UPDATE user_accounts SET password = ?, require_change_pass = 0 WHERE lower(email) = lower(?)", (new_p1, st.session_state["user_email"]))
+                    conn.commit()
+                    st.success("✅ Password successfully updated!")
+                else:
+                    st.error("❌ Incorrect current password.")
+                conn.close()
+            else:
+                st.error("⚠️ Passwords do not match or empty.")
+
 st.sidebar.markdown("---")
 st.sidebar.title("📌 System Navigation")
 selected_view = st.sidebar.radio("Select Active Module:", TABS)
 
-# DEVELOPER OWNERSHIP CREDIT
 st.sidebar.markdown("---")
 st.sidebar.markdown(
     """
@@ -635,7 +639,6 @@ st.sidebar.markdown(
     unsafe_allow_html=True
 )
 
-# Top Header
 c_hdr1, c_hdr2 = st.columns([3, 1])
 with c_hdr1:
     st.markdown('<div class="main-title">🕊️ PAMANA Peace & Development Program System</div>', unsafe_allow_html=True)
@@ -863,16 +866,13 @@ elif selected_view == "Geotagged_Photos":
     st.dataframe(df_photos, use_container_width=True)
 
 # ---------------------------------------------------------
-# 8. FINANCE MODULE (EXACT PUBLISHED LINK - SINGLE SHEET ISOLATED)
+# 8. FINANCE MODULE
 # ---------------------------------------------------------
 elif selected_view == "Finance":
     st.subheader("💰 Finance - Monitoring Evaluation Report")
     st.caption("Live Synchronization Viewer • Official Executive Finance Tracking")
 
-    # Full Spreadsheet Edit Link for Button
     sheet_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/edit?usp=sharing"
-    
-    # Exact Published Link with widget=false (Matago ang tanan ibang tabs sa ubos)
     embed_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT51CpWr5YaWUkDCfJYmUCAFduSjlC8Nlbxqb2DGceLH2CuaQ9EIOva6HRVj5ikVQ/pubhtml?gid=1476863389&single=true&widget=false&headers=false"
 
     c_f1, c_f2 = st.columns([3, 1])
@@ -883,7 +883,6 @@ elif selected_view == "Finance":
 
     st.markdown("---")
 
-    # Embed Single Sheet Viewer
     st.markdown(
         f"""
         <iframe src="{embed_url}" 
@@ -908,7 +907,6 @@ else:
     if st.session_state.get("show_add_form", True):
         with st.expander(f"📝 Comprehensive Entry Form: {selected_view}", expanded=True):
             
-            # CEAC MUNICIPAL DYNAMIC FORM OUTSIDE PRE-RENDER
             if selected_view == "CEAC_Municipal":
                 col_left, col_right = st.columns(2)
                 with col_left:
@@ -930,7 +928,6 @@ else:
 
                 st.markdown("---")
                 
-                # DYNAMIC FORM SWITCHING BASED ON GRS INTAKE
                 if selected_m_act == "GRS Instake":
                     st.markdown("##### 📁 Upload GRS Intake Files (Multiple Upload - Up to 10 Files)")
                     grs_files = st.file_uploader("Choose GRS Files (Max 10)", type=["pdf", "png", "jpg", "jpeg", "docx"], accept_multiple_files=True, key="cm_grs_files")
@@ -975,7 +972,6 @@ else:
                     st.session_state["show_add_form"] = False
                     st.rerun()
 
-            # CEAC BARANGAY DYNAMIC FORM
             elif selected_view == "CEAC_Barangay":
                 col_left, col_right = st.columns(2)
                 with col_left:
@@ -998,7 +994,6 @@ else:
 
                 st.markdown("---")
                 
-                # DYNAMIC FORM SWITCHING BASED ON CV (COMMUNITY VOLUNTEERS)
                 if selected_b_act == "CV":
                     st.markdown("##### 📁 Upload CV Files (Multiple Upload - Up to 30 CVs)")
                     cv_files = st.file_uploader("Choose CV Files (Max 30)", type=["pdf", "png", "jpg", "jpeg", "docx"], accept_multiple_files=True, key="cb_cv_files")
@@ -1122,7 +1117,6 @@ else:
                         st.session_state["show_add_form"] = False
                         st.rerun()
 
-    # LIVE DATA TABLE DISPLAY & LACKING ACTIVITIES/MOVS CALCULATOR
     st.markdown("---")
     st.subheader(f"📊 Added Activities Masterlist ({selected_view})")
     
@@ -1147,7 +1141,6 @@ else:
             st.success("Database synchronized successfully!")
             st.rerun()
 
-        # LACKING ACTIVITIES & LACKING MOVs TRACKER SUMMARY AT THE BOTTOM
         if selected_view in ["CEAC_Municipal", "CEAC_Barangay"]:
             st.markdown("---")
             st.markdown("### ⚠️ Lacking Activities & Lacking MOVs Audit Trail Tracker")
@@ -1199,7 +1192,6 @@ else:
     else:
         st.info(f"No records found in '{selected_view}'. Use the '➕ Add New Activity / Record' button above to create entry.")
 
-# DEVELOPER FOOTER BADGE
 st.markdown("---")
 st.markdown(
     """
