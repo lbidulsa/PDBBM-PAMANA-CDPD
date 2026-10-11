@@ -125,14 +125,12 @@ def generate_random_password(length=10):
     chars = string.ascii_letters + string.digits + "!@#$%&*"
     return ''.join(secrets.choice(chars) for _ in range(length))
 
-# HELPER: EMAIL SENDER VIA SMTP (PROFESSIONAL DISPATCH)
+# HELPER: EMAIL SENDER VIA SMTP (DIRECTLY INJECTED APP PASSWORD)
 def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User"):
-    sender_email = os.environ.get("SMTP_EMAIL", "lbidulsa.fo10@dswd.gov.ph")
-    sender_password = os.environ.get("SMTP_PASSWORD", "")
+    # Direct Injected Email Credentials
+    sender_email = "lbidulsa.fo10@dswd.gov.ph"
+    sender_password = "rkgqurmorpvfgktq"  # Google App Password without spaces
     
-    if not sender_password:
-        return False, "SMTP Password not configured in system environment variables."
-        
     try:
         msg = MIMEMultipart('alternative')
         msg['From'] = f"DSWD FO X PAMANA CDPD System <{sender_email}>"
