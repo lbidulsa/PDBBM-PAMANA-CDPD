@@ -285,6 +285,7 @@ def login():
                         st.session_state["user_role"] = res[4]
                         st.session_state["user_name"] = res[1]
                         st.session_state["must_change_pass"] = bool(res[5])
+                        st.toast(f"Welcome back, {res[1]}!", icon="👋")
                         st.success(f"Welcome back, {res[1]}!")
                         st.rerun()
                     else:
@@ -308,6 +309,7 @@ def login():
                     
                     sent_ok, msg_res = send_credentials_email(found_user[1], found_user[0], otp, found_user[2])
                     if sent_ok:
+                        st.toast("Verification code sent!", icon="📩")
                         st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user[1]}!")
                     else:
                         st.warning(f"⚠️ Email dispatch status: {msg_res}")
@@ -331,6 +333,7 @@ def login():
                                     text("UPDATE user_accounts SET password = :p, require_change_pass = 0 WHERE lower(email) = lower(:e)"),
                                     {"p": new_pass, "e": u_email}
                                 )
+                            st.toast("Password updated successfully!", icon="✅")
                             st.success("Password updated successfully! You may now proceed to login.")
                             st.session_state["reset_otp"] = None
                             st.session_state["reset_user_email"] = None
@@ -364,6 +367,7 @@ if st.session_state.get("must_change_pass"):
                                 {"p": new_p1, "e": st.session_state["user_email"]}
                             )
                         st.session_state["must_change_pass"] = False
+                        st.toast("Password changed successfully!", icon="✅")
                         st.success("✅ Password changed successfully!")
                         st.rerun()
                     else:
@@ -451,6 +455,7 @@ with st.sidebar.expander("🔑 Change My Password"):
                             text("UPDATE user_accounts SET password = :p, require_change_pass = 0 WHERE lower(email) = lower(:e)"),
                             {"p": new_p1, "e": st.session_state["user_email"]}
                         )
+                    st.toast("✅ Password updated successfully!", icon="🔑")
                     st.success("✅ Password successfully updated!")
                 else:
                     st.error("❌ Incorrect current password.")
@@ -565,6 +570,7 @@ elif selected_view == "User Management Portal":
                                     {"fn": new_fullname, "e": new_email, "p": curr_temp_pass, "r": new_role}
                                 )
                             
+                            st.toast(f"✅ User '{new_fullname}' created!", icon="👤")
                             st.success(f"✅ User '{new_fullname}' ({new_role}) successfully created!")
                             
                             if send_via_email:
@@ -608,23 +614,27 @@ elif selected_view == "User Management Portal":
                     r_id, r_email, r_name, r_role = u_dict[selected_reset]
                     new_temp = generate_random_password()
                     
-                    with engine.begin() as conn:
-                        conn.execute(
-                            text("UPDATE user_accounts SET password = :p, require_change_pass = 1 WHERE id = :id"),
-                            {"p": new_temp, "id": r_id}
-                        )
-                    
-                    st.success(f"✅ Reset Password initiated for {r_email}!")
-                    
-                    if send_reset_mail:
-                        sent_ok, msg_res = send_credentials_email(r_email, r_name, new_temp, r_role)
-                        if sent_ok:
-                            st.success(f"📩 Reset password emailed directly to {r_email}!")
+                    try:
+                        with engine.begin() as conn:
+                            conn.execute(
+                                text("UPDATE user_accounts SET password = :p, require_change_pass = 1 WHERE id = :id"),
+                                {"p": new_temp, "id": r_id}
+                            )
+                        
+                        st.toast("🔑 Password reset initiated!", icon="🔐")
+                        st.success(f"✅ Reset Password initiated for {r_email}!")
+                        
+                        if send_reset_mail:
+                            sent_ok, msg_res = send_credentials_email(r_email, r_name, new_temp, r_role)
+                            if sent_ok:
+                                st.success(f"📩 Reset password emailed directly to {r_email}!")
+                            else:
+                                st.warning(f"⚠️ Email dispatch status: {msg_res}")
+                                st.info(f"🔑 **BACKUP RESET PASS:** `{new_temp}`")
                         else:
-                            st.warning(f"⚠️ Email dispatch status: {msg_res}")
-                            st.info(f"🔑 **BACKUP RESET PASS:** `{new_temp}`")
-                    else:
-                        st.info(f"🔑 **NEW TEMPORARY PASS:** `{new_temp}`")
+                            st.info(f"🔑 **NEW TEMPORARY PASS:** `{new_temp}`")
+                    except Exception as ex:
+                        st.error(f"❌ DATABASE ERROR: {ex}")
             else:
                 st.info("No matching users found.")
 
@@ -662,7 +672,7 @@ elif selected_view == "Geotagged_Photos":
         with st.form("photo_upload_form", clear_on_submit=True):
             col_u1, col_u2 = st.columns(2)
             with col_u1:
-                sp_id = st.text_input("Sub-Project ID / Code")
+                sp_id = st.text_input("Sub-Project ID / Code*")
                 sp_name = st.text_input("Sub-Project Name")
                 stage = st.selectbox("Stage", ["BEFORE Construction", "DURING Construction", "AFTER / Completed"])
                 latitude = st.text_input("Latitude (GPS)*", value=detected_lat)
@@ -671,28 +681,33 @@ elif selected_view == "Geotagged_Photos":
                 st.caption("📷 File preview or auto-detected metadata will reflect automatically.")
 
             submit_photo = st.form_submit_button("⬆️ Submit & Save Photo")
-            if submit_photo and uploaded_file and sp_id:
-                file_path = os.path.join("uploaded_photos", uploaded_file.name)
-                with open(file_path, "wb") as f:
-                    f.write(uploaded_file.getbuffer())
+            if submit_photo:
+                if not uploaded_file or not sp_id.strip():
+                    st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug mag-upload og file ug isulat ang Sub-Project ID!")
+                else:
+                    try:
+                        file_path = os.path.join("uploaded_photos", uploaded_file.name)
+                        with open(file_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
 
-                with engine.begin() as conn:
-                    conn.execute(
-                        text("""
-                            INSERT INTO geotagged_photos (sp_id, sp_name, stage, latitude, longitude, photo_file, date_uploaded, encoder)
-                            VALUES (:sp_id, :sp_name, :stage, :lat, :lon, :file, CURRENT_DATE, :encoder)
-                        """),
-                        {
-                            "sp_id": sp_id, "sp_name": sp_name, "stage": stage,
-                            "lat": latitude, "lon": longitude, "file": uploaded_file.name,
-                            "encoder": st.session_state["user_name"]
-                        }
-                    )
+                        with engine.begin() as conn:
+                            conn.execute(
+                                text("""
+                                    INSERT INTO geotagged_photos (sp_id, sp_name, stage, latitude, longitude, photo_file, date_uploaded, encoder)
+                                    VALUES (:sp_id, :sp_name, :stage, :lat, :lon, :file, CURRENT_DATE, :encoder)
+                                """),
+                                {
+                                    "sp_id": sp_id.strip(), "sp_name": sp_name, "stage": stage,
+                                    "lat": latitude, "lon": longitude, "file": uploaded_file.name,
+                                    "encoder": st.session_state["user_name"]
+                                }
+                            )
 
-                st.success(f"Photo '{uploaded_file.name}' saved to database successfully!")
-                if uploaded_file.type in ["image/jpeg", "image/png"]:
-                    st.image(Image.open(uploaded_file), caption=f"Preview: {stage} - {sp_id} (Lat: {latitude}, Lon: {longitude})", width=350)
-                st.rerun()
+                        st.toast("✅ Geotagged photo saved to Supabase!", icon="📸")
+                        st.success(f"Photo '{uploaded_file.name}' saved to database successfully!")
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"❌ DATABASE ERROR: {ex}")
 
     st.markdown("---")
     st.subheader("📋 Listed Geotagged Photos Records")
@@ -794,22 +809,26 @@ else:
                 st.markdown("---")
                 b1, b2, b3 = st.columns([2, 2, 1])
                 if b1.button("💾 Save Record to Database", use_container_width=True, key="cm_save_btn"):
-                    with engine.begin() as conn:
-                        conn.execute(
-                            text("""
-                                INSERT INTO ceac_municipal (activity_name, region, province, municipality, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_minutes, mov_lgu_minutes, mov_grs_files, remarks)
-                                VALUES (:act, :reg, :prov, :mun, :cyc, :dt, :denc, :enc, :mst, :est, :att, :min, :lgu, :grs, :rem)
-                            """),
-                            {
-                                "act": selected_m_act, "reg": cm_region, "prov": cm_province, "mun": cm_municipality,
-                                "cyc": cm_cycle, "dt": cm_date, "denc": cm_date_enc, "enc": cm_encoder,
-                                "mst": cm_mov_st, "est": cm_enc_st, "att": att_saved, "min": min_saved,
-                                "lgu": lgu_saved, "grs": grs_saved, "rem": cm_remarks
-                            }
-                        )
-                    st.success("Municipal Activity record saved to database successfully!")
-                    st.session_state["show_add_form"] = False
-                    st.rerun()
+                    try:
+                        with engine.begin() as conn:
+                            conn.execute(
+                                text("""
+                                    INSERT INTO ceac_municipal (activity_name, region, province, municipality, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_minutes, mov_lgu_minutes, mov_grs_files, remarks)
+                                    VALUES (:act, :reg, :prov, :mun, :cyc, :dt, :denc, :enc, :mst, :est, :att, :min, :lgu, :grs, :rem)
+                                """),
+                                {
+                                    "act": selected_m_act, "reg": cm_region, "prov": cm_province, "mun": cm_municipality,
+                                    "cyc": cm_cycle, "dt": cm_date, "denc": cm_date_enc, "enc": cm_encoder,
+                                    "mst": cm_mov_st, "est": cm_enc_st, "att": att_saved, "min": min_saved,
+                                    "lgu": lgu_saved, "grs": grs_saved, "rem": cm_remarks
+                                }
+                            )
+                        st.toast("✅ Municipal Activity record saved to Supabase!", icon="🎉")
+                        st.success("Municipal Activity record saved to database successfully!")
+                        st.session_state["show_add_form"] = False
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"❌ DATABASE ERROR: {ex}")
 
             elif selected_view == "CEAC_Barangay":
                 col_left, col_right = st.columns(2)
@@ -818,7 +837,7 @@ else:
                     cb_region = st.selectbox("Region", REGIONS, key="cb_reg")
                     cb_province = st.selectbox("Province", PROVINCES, key="cb_prov")
                     cb_municipality = st.selectbox("Municipality", MUNICIPALITIES, key="cb_mun")
-                    cb_barangay = st.text_input("Barangay Name", key="cb_brgy")
+                    cb_barangay = st.text_input("Barangay Name*", key="cb_brgy")
                     cb_cycle = st.selectbox("Cycle / Batch", CYCLE_BATCHES, key="cb_cyc")
                     cb_date = st.date_input("Activity Date", datetime.date.today(), key="cb_dt").strftime("%Y-%m-%d")
                 
@@ -865,22 +884,29 @@ else:
                 st.markdown("---")
                 b1, b2, b3 = st.columns([2, 2, 1])
                 if b1.button("💾 Save Record to Database", use_container_width=True, key="cb_save_btn"):
-                    with engine.begin() as conn:
-                        conn.execute(
-                            text("""
-                                INSERT INTO ceac_barangay (activity_name, region, province, municipality, barangay, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_brgy_minutes, mov_lgu_minutes, mov_cv_files, remarks)
-                                VALUES (:act, :reg, :prov, :mun, :brgy, :cyc, :dt, :denc, :enc, :mst, :est, :att, :bmin, :lgu, :cv, :rem)
-                            """),
-                            {
-                                "act": selected_b_act, "reg": cb_region, "prov": cb_province, "mun": cb_municipality,
-                                "brgy": cb_barangay, "cyc": cb_cycle, "dt": cb_date, "denc": cb_date_enc,
-                                "enc": cb_encoder, "mst": cb_mov_st, "est": cb_enc_st, "att": att_saved,
-                                "bmin": brgy_min_saved, "lgu": lgu_saved, "cv": cv_saved, "rem": cb_remarks
-                            }
-                        )
-                    st.success("Barangay Activity record saved to database successfully!")
-                    st.session_state["show_add_form"] = False
-                    st.rerun()
+                    if not cb_barangay.strip():
+                        st.error("⚠️ **REQUIRED FIELD MISSING:** Palihug sulati ang Barangay Name!")
+                    else:
+                        try:
+                            with engine.begin() as conn:
+                                conn.execute(
+                                    text("""
+                                        INSERT INTO ceac_barangay (activity_name, region, province, municipality, barangay, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_brgy_minutes, mov_lgu_minutes, mov_cv_files, remarks)
+                                        VALUES (:act, :reg, :prov, :mun, :brgy, :cyc, :dt, :denc, :enc, :mst, :est, :att, :bmin, :lgu, :cv, :rem)
+                                    """),
+                                    {
+                                        "act": selected_b_act, "reg": cb_region, "prov": cb_province, "mun": cb_municipality,
+                                        "brgy": cb_barangay.strip(), "cyc": cb_cycle, "dt": cb_date, "denc": cb_date_enc,
+                                        "enc": cb_encoder, "mst": cb_mov_st, "est": cb_enc_st, "att": att_saved,
+                                        "bmin": brgy_min_saved, "lgu": lgu_saved, "cv": cv_saved, "rem": cb_remarks
+                                    }
+                                )
+                            st.toast("✅ Barangay Activity record saved to Supabase!", icon="🎉")
+                            st.success("Barangay Activity record saved to database successfully!")
+                            st.session_state["show_add_form"] = False
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"❌ DATABASE ERROR: {ex}")
 
             else:
                 with st.form(f"form_add_{selected_view}"):
@@ -889,8 +915,8 @@ else:
 
                     if selected_view == "Sub_Project_Closeout_Tracker":
                         with col_left:
-                            form_data["sp_id"] = st.text_input("Sub-Project ID / Code", key="sp_id_in")
-                            form_data["sp_name"] = st.text_input("Sub-Project Name", key="sp_name_in")
+                            form_data["sp_id"] = st.text_input("Sub-Project ID / Code*", key="sp_id_in")
+                            form_data["sp_name"] = st.text_input("Sub-Project Name*", key="sp_name_in")
                             form_data["municipality"] = st.selectbox("Municipality", MUNICIPALITIES, key="sp_mun")
                             form_data["barangay"] = st.text_input("Barangay Name", key="sp_brgy")
                             form_data["cycle_batch"] = st.selectbox("Cycle / Batch", CYCLE_BATCHES, key="sp_cyc")
@@ -918,9 +944,9 @@ else:
 
                     elif selected_view == "Disbursement":
                         with col_left:
-                            form_data["sp_id"] = st.text_input("Sub-Project ID / Code", key="d_spid")
+                            form_data["sp_id"] = st.text_input("Sub-Project ID / Code*", key="d_spid")
                             form_data["sp_name"] = st.text_input("Sub-Project Name", key="d_spname")
-                            form_data["dv_number"] = st.text_input("Disbursement Voucher (DV) No.", key="d_dv")
+                            form_data["dv_number"] = st.text_input("Disbursement Voucher (DV) No.*", key="d_dv")
                             form_data["check_number"] = st.text_input("Check / LDDAP No.", key="d_chk")
                             form_data["payee"] = st.text_input("Payee / Recipient", key="d_payee")
                             form_data["disbursement_date"] = st.date_input("Disbursement Date", datetime.date.today(), key="d_dt").strftime("%Y-%m-%d")
@@ -949,19 +975,32 @@ else:
                     cancel_btn = b3.form_submit_button("❌ Cancel", use_container_width=True)
 
                     if save_btn:
-                        table_low = selected_view.lower()
-                        col_names_str = ", ".join(form_data.keys())
-                        placeholders = ", ".join([f":{k}" for k in form_data.keys()])
-                        
-                        with engine.begin() as conn:
-                            conn.execute(
-                                text(f"INSERT INTO {table_low} ({col_names_str}) VALUES ({placeholders})"),
-                                form_data
-                            )
+                        valid = True
+                        if selected_view == "Sub_Project_Closeout_Tracker" and (not form_data.get("sp_id") or not form_data.get("sp_name")):
+                            st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug sulati ang Sub-Project ID ug Sub-Project Name!")
+                            valid = False
+                        elif selected_view == "Disbursement" and (not form_data.get("sp_id") or not form_data.get("dv_number")):
+                            st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug sulati ang Sub-Project ID ug DV Number!")
+                            valid = False
 
-                        st.success("Record saved to database successfully!")
-                        st.session_state["show_add_form"] = False
-                        st.rerun()
+                        if valid:
+                            table_low = selected_view.lower()
+                            col_names_str = ", ".join(form_data.keys())
+                            placeholders = ", ".join([f":{k}" for k in form_data.keys()])
+                            
+                            try:
+                                with engine.begin() as conn:
+                                    conn.execute(
+                                        text(f"INSERT INTO {table_low} ({col_names_str}) VALUES ({placeholders})"),
+                                        form_data
+                                    )
+
+                                st.toast(f"✅ Record saved to {selected_view}!", icon="💾")
+                                st.success("Record saved to database successfully!")
+                                st.session_state["show_add_form"] = False
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"❌ DATABASE ERROR: {ex}")
 
     st.markdown("---")
     st.subheader(f"📊 Added Activities Masterlist ({selected_view})")
@@ -982,10 +1021,14 @@ else:
         )
         if st.session_state["user_role"] in ["Superuser", "Admin"] and st.button("💾 Sync Table Changes to Database"):
             table_low = selected_view.lower()
-            with engine.begin() as conn:
-                edited_df.to_sql(table_low, conn, if_exists="replace", index=False)
-            st.success("Database synchronized successfully!")
-            st.rerun()
+            try:
+                with engine.begin() as conn:
+                    edited_df.to_sql(table_low, conn, if_exists="replace", index=False)
+                st.toast("✅ Table changes synchronized to Supabase!", icon="🎉")
+                st.success("Database synchronized successfully!")
+                st.rerun()
+            except Exception as ex:
+                st.error(f"❌ DATABASE ERROR: {ex}")
 
     else:
         st.info(f"No records found in '{selected_view}'. Use the '➕ Add New Activity / Record' button above to create entry.")
