@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-import sqlite3
+from sqlalchemy import create_engine, text
 import plotly.express as px
 from PIL import Image, ExifTags
 import os
@@ -123,7 +123,7 @@ def generate_random_password(length=10):
 
 def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User"):
     sender_email = "lbidulsa.fo10@dswd.gov.ph"
-    sender_password = "rkgqurmorpvfgktq"  # Google App Password without spaces
+    sender_password = "rkgqurmorpvfgktq"
     
     try:
         msg = MIMEMultipart('alternative')
@@ -217,166 +217,25 @@ def extract_gps_from_image(image_file):
         return None, None
 
 # ---------------------------------------------------------
-# 1. LOCAL SQLITE DATABASE INITIALIZATION
+# 1. CENTRALIZED SUPABASE CLOUD DATABASE INITIALIZATION
 # ---------------------------------------------------------
-DB_FILE = "pamana_database.db"
+DEFAULT_DB_URL = "postgresql+psycopg2://postgres.oxyvjstdncnnefbkilaa:5GLJZg5tWE28Wud9@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres"
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+@st.cache_resource
+def get_db_engine():
+    try:
+        db_url = st.secrets.get("SUPABASE_URL", DEFAULT_DB_URL)
+    except Exception:
+        db_url = DEFAULT_DB_URL
+    return create_engine(db_url, pool_pre_ping=True)
 
-def init_db():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS user_accounts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            full_name TEXT,
-            email TEXT UNIQUE,
-            password TEXT,
-            user_role TEXT,
-            require_change_pass INTEGER DEFAULT 0
-        )
-    """)
-
-    SUPERUSER_EMAIL = "lbidulsa.fo10@dswd.gov.ph"
-    SUPERUSER_PASS = "P@ssw0rd"
-    
-    cursor.execute("SELECT COUNT(*) FROM user_accounts WHERE lower(email) = lower(?)", (SUPERUSER_EMAIL,))
-    if cursor.fetchone()[0] == 0:
-        cursor.execute("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES ('System Administrator', ?, ?, 'Superuser', 0)", (SUPERUSER_EMAIL, SUPERUSER_PASS))
-    else:
-        cursor.execute("UPDATE user_accounts SET password = ?, user_role = 'Superuser' WHERE lower(email) = lower(?)", (SUPERUSER_PASS, SUPERUSER_EMAIL))
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS CEAC_Municipal (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            activity_name TEXT,
-            region TEXT DEFAULT 'REGION X',
-            province TEXT,
-            municipality TEXT,
-            cycle_batch TEXT,
-            activity_date TEXT,
-            date_encoded TEXT,
-            encoded_by TEXT,
-            mov_status TEXT,
-            encoded_status TEXT,
-            mov_attendance TEXT,
-            mov_minutes TEXT,
-            mov_lgu_minutes TEXT,
-            mov_grs_files TEXT,
-            remarks TEXT
-        )
-    """)
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS CEAC_Barangay (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            activity_name TEXT,
-            region TEXT DEFAULT 'REGION X',
-            province TEXT,
-            municipality TEXT,
-            barangay TEXT,
-            cycle_batch TEXT,
-            activity_date TEXT,
-            date_encoded TEXT,
-            encoded_by TEXT,
-            mov_status TEXT,
-            encoded_status TEXT,
-            mov_attendance TEXT,
-            mov_brgy_minutes TEXT,
-            mov_lgu_minutes TEXT,
-            mov_cv_files TEXT,
-            remarks TEXT
-        )
-    """)
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Geotagged_Photos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sp_id TEXT,
-            sp_name TEXT,
-            stage TEXT,
-            latitude TEXT,
-            longitude TEXT,
-            photo_file TEXT,
-            date_uploaded TEXT,
-            encoder TEXT
-        )
-    """)
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Disbursement (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sp_id TEXT,
-            sp_name TEXT,
-            dv_number TEXT,
-            check_number TEXT,
-            payee TEXT,
-            amount REAL,
-            tax_amount REAL,
-            net_amount REAL,
-            disbursement_date TEXT,
-            status TEXT,
-            encoded_status TEXT,
-            mov_file TEXT,
-            attachment TEXT
-        )
-    """)
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Sub_Project_Closeout_Tracker (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sp_id TEXT,
-            sp_name TEXT,
-            municipality TEXT,
-            barangay TEXT,
-            cycle_batch TEXT,
-            functionality_audit_status TEXT,
-            functionality_audit_date TEXT,
-            spcr_status TEXT,
-            spcr_date_submitted TEXT,
-            closing_accounts_status TEXT,
-            date_account_closed TEXT,
-            booking_assets_status TEXT,
-            date_booking_assets TEXT,
-            overall_closeout_status TEXT,
-            encoded_status TEXT,
-            mov_file TEXT,
-            remarks TEXT,
-            target_hhs INTEGER DEFAULT 0,
-            actual_hhs INTEGER DEFAULT 0,
-            male_beneficiaries INTEGER DEFAULT 0,
-            female_beneficiaries INTEGER DEFAULT 0,
-            total_beneficiaries INTEGER DEFAULT 0,
-            hh_variance INTEGER DEFAULT 0
-        )
-    """)
-    
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS Summary (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            municipality TEXT,
-            total_sps INTEGER,
-            total_grant REAL,
-            total_disbursed REAL,
-            total_liquidated REAL,
-            unliquidated_balance REAL
-        )
-    """)
-    
-    conn.commit()
-    conn.close()
-
-init_db()
+engine = get_db_engine()
 
 def load_db_table(table_name):
-    conn = get_db_connection()
-    df = pd.read_sql_query(f"SELECT * FROM {table_name}", conn)
-    conn.close()
-    return df
+    try:
+        return pd.read_sql_query(f"SELECT * FROM {table_name}", engine)
+    except Exception:
+        return pd.DataFrame()
 
 # ---------------------------------------------------------
 # 2. LOGIN PORTAL & FORGOT/RESET PASSWORD
@@ -414,19 +273,19 @@ def login():
                 submit = st.form_submit_button("🔑 Login to Dashboard", use_container_width=True)
                 
                 if submit:
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("SELECT id, full_name, email, password, user_role, require_change_pass FROM user_accounts WHERE lower(email) = lower(?) AND password = ?", (login_email, login_pass))
-                    u_res = cursor.fetchone()
-                    conn.close()
+                    with engine.connect() as conn:
+                        res = conn.execute(
+                            text("SELECT id, full_name, email, password, user_role, require_change_pass FROM user_accounts WHERE lower(email) = lower(:email) AND password = :password"),
+                            {"email": login_email, "password": login_pass}
+                        ).fetchone()
 
-                    if u_res:
+                    if res:
                         st.session_state["logged_in"] = True
-                        st.session_state["user_email"] = u_res["email"]
-                        st.session_state["user_role"] = u_res["user_role"]
-                        st.session_state["user_name"] = u_res["full_name"]
-                        st.session_state["must_change_pass"] = bool(u_res["require_change_pass"])
-                        st.success(f"Welcome back, {u_res['full_name']}!")
+                        st.session_state["user_email"] = res[2]
+                        st.session_state["user_role"] = res[4]
+                        st.session_state["user_name"] = res[1]
+                        st.session_state["must_change_pass"] = bool(res[5])
+                        st.success(f"Welcome back, {res[1]}!")
                         st.rerun()
                     else:
                         st.error("Invalid Email Address or Password!")
@@ -436,20 +295,20 @@ def login():
             reset_email = st.text_input("Enter Registered Email Address:")
             
             if st.button("📩 Send Code via Email", use_container_width=True):
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("SELECT full_name, email, user_role FROM user_accounts WHERE lower(email) = lower(?)", (reset_email.strip(),))
-                found_user = cursor.fetchone()
-                conn.close()
+                with engine.connect() as conn:
+                    found_user = conn.execute(
+                        text("SELECT full_name, email, user_role FROM user_accounts WHERE lower(email) = lower(:email)"),
+                        {"email": reset_email.strip()}
+                    ).fetchone()
                 
                 if found_user:
                     otp = "".join(random.choices(string.digits, k=6))
                     st.session_state["reset_otp"] = otp
-                    st.session_state["reset_user_email"] = found_user["email"]
+                    st.session_state["reset_user_email"] = found_user[1]
                     
-                    sent_ok, msg_res = send_credentials_email(found_user["email"], found_user["full_name"], otp, found_user["user_role"])
+                    sent_ok, msg_res = send_credentials_email(found_user[1], found_user[0], otp, found_user[2])
                     if sent_ok:
-                        st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user['email']}!")
+                        st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user[1]}!")
                     else:
                         st.warning(f"⚠️ Email dispatch status: {msg_res}")
                         st.info(f"📬 [SYSTEM BACKUP RESET CODE]: Your Verification Reset Code is: **{otp}**")
@@ -467,12 +326,11 @@ def login():
                     if entered_otp == st.session_state["reset_otp"]:
                         if new_pass and new_pass == confirm_pass:
                             u_email = st.session_state["reset_user_email"]
-                            conn = get_db_connection()
-                            cursor = conn.cursor()
-                            cursor.execute("UPDATE user_accounts SET password = ?, require_change_pass = 0 WHERE lower(email) = lower(?)", (new_pass, u_email))
-                            conn.commit()
-                            conn.close()
-                            
+                            with engine.begin() as conn:
+                                conn.execute(
+                                    text("UPDATE user_accounts SET password = :p, require_change_pass = 0 WHERE lower(email) = lower(:e)"),
+                                    {"p": new_pass, "e": u_email}
+                                )
                             st.success("Password updated successfully! You may now proceed to login.")
                             st.session_state["reset_otp"] = None
                             st.session_state["reset_user_email"] = None
@@ -500,11 +358,11 @@ if st.session_state.get("must_change_pass"):
                 
                 if submit_chg:
                     if new_p1 and new_p1 == new_p2:
-                        conn = get_db_connection()
-                        cursor = conn.cursor()
-                        cursor.execute("UPDATE user_accounts SET password = ?, require_change_pass = 0 WHERE lower(email) = lower(?)", (new_p1, st.session_state["user_email"]))
-                        conn.commit()
-                        conn.close()
+                        with engine.begin() as conn:
+                            conn.execute(
+                                text("UPDATE user_accounts SET password = :p, require_change_pass = 0 WHERE lower(email) = lower(:e)"),
+                                {"p": new_p1, "e": st.session_state["user_email"]}
+                            )
                         st.session_state["must_change_pass"] = False
                         st.success("✅ Password changed successfully!")
                         st.rerun()
@@ -525,45 +383,19 @@ CLOSEOUT_STATUSES = ["Pending", "In Progress", "Passed / Completed", "Failed / F
 MOV_STATUSES = ["Completed & Uploaded", "Pending MOV", "For Review", "N/A"]
 
 MUNICIPAL_ACTIVITIES = [
-    "Municipal_Profile",
-    "Municipal_Orientation",
-    "1st_MDC_Meeting",
-    "2nd_MDC_Meeting",
-    "2nd_BDC_Meeting",
-    "PPDW",
-    "Technical_Review",
-    "Pre_Implementation_Training",
-    "OM",
-    "MAR_CAR",
-    "Sustainability_Planning_Workshop",
-    "GRS Instake"
+    "Municipal_Profile", "Municipal_Orientation", "1st_MDC_Meeting", "2nd_MDC_Meeting", 
+    "2nd_BDC_Meeting", "PPDW", "Technical_Review", "Pre_Implementation_Training", 
+    "OM", "MAR_CAR", "Sustainability_Planning_Workshop", "GRS Instake"
 ]
 
 BARANGAY_ACTIVITIES = [
-    "Brgy_Profile",
-    "1st_BDC_Meeting",
-    "BPSA",
-    "1st_BA",
-    "2nd_BDC_Meeting",
-    "BAR",
-    "OM",
-    "2nd_BA",
-    "Grievance_Intake",
-    "GRS_Installation_Checklist",
-    "CV",
-    "ERS"
+    "Brgy_Profile", "1st_BDC_Meeting", "BPSA", "1st_BA", "2nd_BDC_Meeting", 
+    "BAR", "OM", "2nd_BA", "Grievance_Intake", "GRS_Installation_Checklist", "CV", "ERS"
 ]
 
 TABS = [
-    "Executive Dashboard",
-    "User Management Portal",
-    "CEAC_Municipal",
-    "CEAC_Barangay",
-    "Geotagged_Photos",
-    "Disbursement",
-    "Sub_Project_Closeout_Tracker",
-    "Summary",
-    "Finance"
+    "Executive Dashboard", "User Management Portal", "CEAC_Municipal", "CEAC_Barangay", 
+    "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "Summary", "Finance"
 ]
 
 def save_uploaded_file(file_obj):
@@ -601,7 +433,6 @@ if st.sidebar.button("🚪 Logout", use_container_width=True):
     st.session_state["user_name"] = None
     st.rerun()
 
-# SELF-SERVICE CHANGE PASSWORD EXPANDER IN SIDEBAR
 with st.sidebar.expander("🔑 Change My Password"):
     with st.form("self_change_pass_pamana"):
         old_p = st.text_input("Current Password*", type="password")
@@ -609,17 +440,20 @@ with st.sidebar.expander("🔑 Change My Password"):
         new_p2 = st.text_input("Confirm New Password*", type="password")
         if st.form_submit_button("Update Password", use_container_width=True):
             if new_p1 == new_p2 and new_p1 != "":
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("SELECT password FROM user_accounts WHERE lower(email) = lower(?)", (st.session_state["user_email"],))
-                res_p = cursor.fetchone()
-                if res_p and res_p["password"] == old_p:
-                    cursor.execute("UPDATE user_accounts SET password = ?, require_change_pass = 0 WHERE lower(email) = lower(?)", (new_p1, st.session_state["user_email"]))
-                    conn.commit()
+                with engine.connect() as conn:
+                    res_p = conn.execute(
+                        text("SELECT password FROM user_accounts WHERE lower(email) = lower(:e)"),
+                        {"e": st.session_state["user_email"]}
+                    ).fetchone()
+                if res_p and res_p[0] == old_p:
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text("UPDATE user_accounts SET password = :p, require_change_pass = 0 WHERE lower(email) = lower(:e)"),
+                            {"p": new_p1, "e": st.session_state["user_email"]}
+                        )
                     st.success("✅ Password successfully updated!")
                 else:
                     st.error("❌ Incorrect current password.")
-                conn.close()
             else:
                 st.error("⚠️ Passwords do not match or empty.")
 
@@ -653,8 +487,8 @@ st.markdown("---")
 # 5. EXECUTIVE DASHBOARD
 # ---------------------------------------------------------
 if selected_view == "Executive Dashboard":
-    df_sp = load_db_table("Sub_Project_Closeout_Tracker")
-    df_disb = load_db_table("Disbursement")
+    df_sp = load_db_table("sub_project_closeout_tracker")
+    df_disb = load_db_table("disbursement")
 
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
@@ -725,11 +559,11 @@ elif selected_view == "User Management Portal":
                 if submit_user:
                     if new_fullname and new_email:
                         try:
-                            conn = get_db_connection()
-                            cursor = conn.cursor()
-                            cursor.execute("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (?, ?, ?, ?, 1)", (new_fullname, new_email, curr_temp_pass, new_role))
-                            conn.commit()
-                            conn.close()
+                            with engine.begin() as conn:
+                                conn.execute(
+                                    text("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (:fn, :e, :p, :r, 1)"),
+                                    {"fn": new_fullname, "e": new_email, "p": curr_temp_pass, "r": new_role}
+                                )
                             
                             st.success(f"✅ User '{new_fullname}' ({new_role}) successfully created!")
                             
@@ -745,8 +579,8 @@ elif selected_view == "User Management Portal":
                                     
                             st.session_state["gen_temp_pass"] = generate_random_password()
                             st.rerun()
-                        except sqlite3.IntegrityError:
-                            st.error("⚠️ Email address already registered!")
+                        except Exception as ex:
+                            st.error(f"⚠️ Error creating user account: {ex}")
                     else:
                         st.error("Please fill in Full Name and Email Address.")
 
@@ -755,22 +589,18 @@ elif selected_view == "User Management Portal":
             st.markdown("##### 🔑 Reset User Password (with Live Search)")
             user_search = st.text_input("🔍 Search User Name or Email:")
             
-            conn = get_db_connection()
-            cursor = conn.cursor()
             query_u = "SELECT id, full_name, email, user_role FROM user_accounts WHERE user_role != 'Superuser'"
-            params_u = []
+            params_u = {}
             
             if user_search:
-                query_u += " AND (lower(full_name) LIKE lower(?) OR lower(email) LIKE lower(?))"
-                p_term = f"%{user_search.strip()}%"
-                params_u.extend([p_term, p_term])
+                query_u += " AND (lower(full_name) LIKE lower(:s) OR lower(email) LIKE lower(:s))"
+                params_u["s"] = f"%{user_search.strip()}%"
                 
-            cursor.execute(query_u, params_u)
-            u_list = cursor.fetchall()
-            conn.close()
+            with engine.connect() as conn:
+                u_list = conn.execute(text(query_u), params_u).fetchall()
             
             if u_list:
-                u_dict = {f"{r['full_name']} ({r['email']}) - [{r['user_role']}]": (r['id'], r['email'], r['full_name'], r['user_role']) for r in u_list}
+                u_dict = {f"{r[1]} ({r[2]}) - [{r[3]}]": (r[0], r[2], r[1], r[3]) for r in u_list}
                 selected_reset = st.selectbox("Select Filtered User Account:", list(u_dict.keys()))
                 send_reset_mail = st.checkbox("📧 Email New Password Directly to User", value=True, key="rst_m_chk")
                 
@@ -778,11 +608,11 @@ elif selected_view == "User Management Portal":
                     r_id, r_email, r_name, r_role = u_dict[selected_reset]
                     new_temp = generate_random_password()
                     
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("UPDATE user_accounts SET password = ?, require_change_pass = 1 WHERE id = ?", (new_temp, r_id))
-                    conn.commit()
-                    conn.close()
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text("UPDATE user_accounts SET password = :p, require_change_pass = 1 WHERE id = :id"),
+                            {"p": new_temp, "id": r_id}
+                        )
                     
                     st.success(f"✅ Reset Password initiated for {r_email}!")
                     
@@ -806,7 +636,7 @@ elif selected_view == "User Management Portal":
     st.dataframe(df_users, use_container_width=True, hide_index=True)
 
 # ---------------------------------------------------------
-# 7. GEOTAGGED PHOTOS MODULE WITH AUTO-GPS DETECT
+# 7. GEOTAGGED PHOTOS MODULE
 # ---------------------------------------------------------
 elif selected_view == "Geotagged_Photos":
     st.subheader("📸 Geotagged Photos & Progress File Uploads")
@@ -846,14 +676,18 @@ elif selected_view == "Geotagged_Photos":
                 with open(file_path, "wb") as f:
                     f.write(uploaded_file.getbuffer())
 
-                conn = get_db_connection()
-                cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO Geotagged_Photos (sp_id, sp_name, stage, latitude, longitude, photo_file, date_uploaded, encoder)
-                    VALUES (?, ?, ?, ?, ?, ?, DATE('now'), ?)
-                """, (sp_id, sp_name, stage, latitude, longitude, uploaded_file.name, st.session_state["user_name"]))
-                conn.commit()
-                conn.close()
+                with engine.begin() as conn:
+                    conn.execute(
+                        text("""
+                            INSERT INTO geotagged_photos (sp_id, sp_name, stage, latitude, longitude, photo_file, date_uploaded, encoder)
+                            VALUES (:sp_id, :sp_name, :stage, :lat, :lon, :file, CURRENT_DATE, :encoder)
+                        """),
+                        {
+                            "sp_id": sp_id, "sp_name": sp_name, "stage": stage,
+                            "lat": latitude, "lon": longitude, "file": uploaded_file.name,
+                            "encoder": st.session_state["user_name"]
+                        }
+                    )
 
                 st.success(f"Photo '{uploaded_file.name}' saved to database successfully!")
                 if uploaded_file.type in ["image/jpeg", "image/png"]:
@@ -862,7 +696,7 @@ elif selected_view == "Geotagged_Photos":
 
     st.markdown("---")
     st.subheader("📋 Listed Geotagged Photos Records")
-    df_photos = load_db_table("Geotagged_Photos")
+    df_photos = load_db_table("geotagged_photos")
     st.dataframe(df_photos, use_container_width=True)
 
 # ---------------------------------------------------------
@@ -960,14 +794,19 @@ else:
                 st.markdown("---")
                 b1, b2, b3 = st.columns([2, 2, 1])
                 if b1.button("💾 Save Record to Database", use_container_width=True, key="cm_save_btn"):
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        INSERT INTO CEAC_Municipal (activity_name, region, province, municipality, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_minutes, mov_lgu_minutes, mov_grs_files, remarks)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (selected_m_act, cm_region, cm_province, cm_municipality, cm_cycle, cm_date, cm_date_enc, cm_encoder, cm_mov_st, cm_enc_st, att_saved, min_saved, lgu_saved, grs_saved, cm_remarks))
-                    conn.commit()
-                    conn.close()
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text("""
+                                INSERT INTO ceac_municipal (activity_name, region, province, municipality, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_minutes, mov_lgu_minutes, mov_grs_files, remarks)
+                                VALUES (:act, :reg, :prov, :mun, :cyc, :dt, :denc, :enc, :mst, :est, :att, :min, :lgu, :grs, :rem)
+                            """),
+                            {
+                                "act": selected_m_act, "reg": cm_region, "prov": cm_province, "mun": cm_municipality,
+                                "cyc": cm_cycle, "dt": cm_date, "denc": cm_date_enc, "enc": cm_encoder,
+                                "mst": cm_mov_st, "est": cm_enc_st, "att": att_saved, "min": min_saved,
+                                "lgu": lgu_saved, "grs": grs_saved, "rem": cm_remarks
+                            }
+                        )
                     st.success("Municipal Activity record saved to database successfully!")
                     st.session_state["show_add_form"] = False
                     st.rerun()
@@ -1026,14 +865,19 @@ else:
                 st.markdown("---")
                 b1, b2, b3 = st.columns([2, 2, 1])
                 if b1.button("💾 Save Record to Database", use_container_width=True, key="cb_save_btn"):
-                    conn = get_db_connection()
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        INSERT INTO CEAC_Barangay (activity_name, region, province, municipality, barangay, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_brgy_minutes, mov_lgu_minutes, mov_cv_files, remarks)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (selected_b_act, cb_region, cb_province, cb_municipality, cb_barangay, cb_cycle, cb_date, cb_date_enc, cb_encoder, cb_mov_st, cb_enc_st, att_saved, brgy_min_saved, lgu_saved, cv_saved, cb_remarks))
-                    conn.commit()
-                    conn.close()
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text("""
+                                INSERT INTO ceac_barangay (activity_name, region, province, municipality, barangay, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_brgy_minutes, mov_lgu_minutes, mov_cv_files, remarks)
+                                VALUES (:act, :reg, :prov, :mun, :brgy, :cyc, :dt, :denc, :enc, :mst, :est, :att, :bmin, :lgu, :cv, :rem)
+                            """),
+                            {
+                                "act": selected_b_act, "reg": cb_region, "prov": cb_province, "mun": cb_municipality,
+                                "brgy": cb_barangay, "cyc": cb_cycle, "dt": cb_date, "denc": cb_date_enc,
+                                "enc": cb_encoder, "mst": cb_mov_st, "est": cb_enc_st, "att": att_saved,
+                                "bmin": brgy_min_saved, "lgu": lgu_saved, "cv": cv_saved, "rem": cb_remarks
+                            }
+                        )
                     st.success("Barangay Activity record saved to database successfully!")
                     st.session_state["show_add_form"] = False
                     st.rerun()
@@ -1105,13 +949,15 @@ else:
                     cancel_btn = b3.form_submit_button("❌ Cancel", use_container_width=True)
 
                     if save_btn:
-                        conn = get_db_connection()
-                        cursor = conn.cursor()
+                        table_low = selected_view.lower()
                         col_names_str = ", ".join(form_data.keys())
-                        placeholders = ", ".join(["?"] * len(form_data))
-                        cursor.execute(f"INSERT INTO {selected_view} ({col_names_str}) VALUES ({placeholders})", list(form_data.values()))
-                        conn.commit()
-                        conn.close()
+                        placeholders = ", ".join([f":{k}" for k in form_data.keys()])
+                        
+                        with engine.begin() as conn:
+                            conn.execute(
+                                text(f"INSERT INTO {table_low} ({col_names_str}) VALUES ({placeholders})"),
+                                form_data
+                            )
 
                         st.success("Record saved to database successfully!")
                         st.session_state["show_add_form"] = False
@@ -1120,7 +966,7 @@ else:
     st.markdown("---")
     st.subheader(f"📊 Added Activities Masterlist ({selected_view})")
     
-    df_current = load_db_table(selected_view)
+    df_current = load_db_table(selected_view.lower())
     search_q = st.text_input("🔍 Quick Keyword Search Across Records:", "")
     df_filtered = df_current.copy()
     if search_q and not df_filtered.empty:
@@ -1135,59 +981,11 @@ else:
             key=f"editor_{selected_view}"
         )
         if st.session_state["user_role"] in ["Superuser", "Admin"] and st.button("💾 Sync Table Changes to Database"):
-            conn = get_db_connection()
-            edited_df.to_sql(selected_view, conn, if_exists="replace", index=False)
-            conn.close()
+            table_low = selected_view.lower()
+            with engine.begin() as conn:
+                edited_df.to_sql(table_low, conn, if_exists="replace", index=False)
             st.success("Database synchronized successfully!")
             st.rerun()
-
-        if selected_view in ["CEAC_Municipal", "CEAC_Barangay"]:
-            st.markdown("---")
-            st.markdown("### ⚠️ Lacking Activities & Lacking MOVs Audit Trail Tracker")
-            
-            ref_activities = MUNICIPAL_ACTIVITIES if selected_view == "CEAC_Municipal" else BARANGAY_ACTIVITIES
-            conducted_acts = df_filtered["activity_name"].dropna().unique().tolist() if "activity_name" in df_filtered.columns else []
-            lacking_acts = [act for act in ref_activities if act not in conducted_acts]
-            
-            c_lak1, c_lak2 = st.columns(2)
-            with c_lak1:
-                st.markdown("#### 📌 Activities Not Yet Conducted:")
-                if lacking_acts:
-                    for act in lacking_acts:
-                        st.error(f"❌ **{act}** - Not Yet Conducted")
-                else:
-                    st.success("🎉 All CEAC Activities completed and encoded!")
-
-            with c_lak2:
-                st.markdown("#### 📄 Records with Lacking MOVs:")
-                lacking_mov_count = 0
-                for _, row in df_filtered.iterrows():
-                    act_n = row.get("activity_name", "N/A")
-                    missing_movs = []
-                    
-                    if act_n == "GRS Instake":
-                        if not str(row.get("mov_grs_files", "")).strip():
-                            missing_movs.append("GRS Multiple Files")
-                    elif act_n == "CV":
-                        if not str(row.get("mov_cv_files", "")).strip():
-                            missing_movs.append("CV Multiple Files")
-                    else:
-                        if not str(row.get("mov_attendance", "")).strip():
-                            missing_movs.append("Attendance")
-                        
-                        min_col = "mov_minutes" if selected_view == "CEAC_Municipal" else "mov_brgy_minutes"
-                        if not str(row.get(min_col, "")).strip():
-                            missing_movs.append("Minutes of Activity")
-                            
-                        if not str(row.get("mov_lgu_minutes", "")).strip():
-                            missing_movs.append("LGU Minutes")
-
-                    if missing_movs:
-                        lacking_mov_count += 1
-                        st.warning(f"⚠️ **ID #{row.get('id', '')} - {act_n}:** Missing ({', '.join(missing_movs)})")
-
-                if lacking_mov_count == 0:
-                    st.success("✅ All encoded records have complete MOVs uploaded!")
 
     else:
         st.info(f"No records found in '{selected_view}'. Use the '➕ Add New Activity / Record' button above to create entry.")
