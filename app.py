@@ -125,6 +125,7 @@ def generate_random_password(length=10):
 def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User"):
     sender_email = "lbidulsa.fo10@dswd.gov.ph"
     sender_password = "rkgqurmorpvfgktq"
+    system_link = "https://pdbbmpamanacdpd.streamlit.app/"
     
     try:
         msg = MIMEMultipart('alternative')
@@ -145,6 +146,17 @@ def send_credentials_email(recipient_email, recipient_name, temp_password, user_
                 <p style="margin: 5px 0;"><b>Login Email:</b> <code style="font-size: 1.1em; color: #1F4E78;">{recipient_email}</code></p>
                 <p style="margin: 5px 0;"><b>Assigned Role:</b> {user_role}</p>
                 <p style="margin: 5px 0;"><b>Temporary Password:</b> <code style="font-size: 1.2em; color: #C53030; font-weight: bold;">{temp_password}</code></p>
+              </div>
+
+              <!-- DIRECT SYSTEM ACCESS LINK & BUTTON -->
+              <div style="text-align: center; margin: 25px 0;">
+                <a href="{system_link}" target="_blank" style="background-color: #1F4E78; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; font-size: 14px;">
+                  🚀 Click Here to Access System Portal
+                </a>
+                <p style="font-size: 0.85em; color: #5A6A85; margin-top: 8px;">
+                  Or copy and paste this link to your browser:<br>
+                  <a href="{system_link}" style="color: #1F4E78;">{system_link}</a>
+                </p>
               </div>
 
               <p><b>Security Notice:</b> Please login to the PAMANA CDPD Portal and change your temporary password upon first system access.</p>
