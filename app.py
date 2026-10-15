@@ -88,6 +88,14 @@ st.markdown("""
         border: 1px solid #CBD5E1;
         margin-bottom: 10px;
     }
+    .active-user-card {
+        background: #FFFFFF;
+        border-left: 4px solid #10B981;
+        padding: 10px 14px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -280,13 +288,27 @@ def login():
                         ).fetchone()
 
                     if res:
+                        # FIX FOR "None" NAME BUG: Fallback to email if full_name is None or empty
+                        display_name = res[1] if (res[1] and str(res[1]).strip() != "" and str(res[1]).lower() != "none") else res[2]
+                        
                         st.session_state["logged_in"] = True
                         st.session_state["user_email"] = res[2]
                         st.session_state["user_role"] = res[4]
-                        st.session_state["user_name"] = res[1]
+                        st.session_state["user_name"] = display_name
                         st.session_state["must_change_pass"] = bool(res[5])
-                        st.toast(f"Welcome back, {res[1]}!", icon="👋")
-                        st.success(f"Welcome back, {res[1]}!")
+
+                        # UPDATE LAST LOGIN TIMESTAMP IN DATABASE
+                        try:
+                            with engine.begin() as conn_up:
+                                conn_up.execute(
+                                    text("UPDATE user_accounts SET last_login = NOW() WHERE id = :uid"),
+                                    {"uid": res[0]}
+                                )
+                        except Exception:
+                            pass
+
+                        st.toast(f"Welcome back, {display_name}!", icon="👋")
+                        st.success(f"Welcome back, {display_name}!")
                         st.rerun()
                     else:
                         st.error("Invalid Email Address or Password!")
@@ -307,7 +329,8 @@ def login():
                     st.session_state["reset_otp"] = otp
                     st.session_state["reset_user_email"] = found_user[1]
                     
-                    sent_ok, msg_res = send_credentials_email(found_user[1], found_user[0], otp, found_user[2])
+                    target_name = found_user[0] if (found_user[0] and str(found_user[0]).lower() != "none") else found_user[1]
+                    sent_ok, msg_res = send_credentials_email(found_user[1], target_name, otp, found_user[2])
                     if sent_ok:
                         st.toast("Verification code sent!", icon="📩")
                         st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user[1]}!")
@@ -426,7 +449,7 @@ def save_multiple_files(files_list):
 if logo_file:
     st.sidebar.image(logo_file, width=220)
 
-st.sidebar.markdown(f"**Logged User:** {st.session_state['user_name']}")
+st.sidebar.markdown(f"**Logged User:** `{st.session_state['user_name']}`")
 st.sidebar.markdown(f"**Email:** `{st.session_state['user_email']}`")
 st.sidebar.markdown(f"**System Role:** <span class='role-badge'>{st.session_state['user_role']}</span>", unsafe_allow_html=True)
 
@@ -537,7 +560,7 @@ if selected_view == "Executive Dashboard":
             st.info("No beneficiary records found.")
 
 # ---------------------------------------------------------
-# 6. USER MANAGEMENT PORTAL (FIXED UNIQUE VIOLATION BUG)
+# 6. USER MANAGEMENT PORTAL (WITH ACTIVE LOGGED USERS & NAME FIX)
 # ---------------------------------------------------------
 elif selected_view == "User Management Portal":
     st.subheader("👤 System User Management Portal")
@@ -545,6 +568,17 @@ elif selected_view == "User Management Portal":
         st.session_state["gen_temp_pass"] = generate_random_password()
     
     USER_ROLES_LIST = ["Superuser", "Admin", "AC", "TF", "MFA", "MDM"]
+
+    # --- CURRENT SESSION ACTIVE USER DISPLAY BADGE ---
+    st.markdown("##### 🟢 Currently Active Session User:")
+    st.markdown(f"""
+        <div class="active-user-card">
+            👤 <b>{st.session_state['user_name']}</b> (`{st.session_state['user_email']}`) &nbsp;|&nbsp; 
+            Role: <span class='role-badge'>{st.session_state['user_role']}</span> &nbsp;|&nbsp; 
+            Status: <span style="color:#10B981; font-weight:bold;">🟢 ACTIVE SESSION ONLINE</span>
+        </div>
+    """, unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
     col_u1, col_u2 = st.columns(2)
     
@@ -565,7 +599,7 @@ elif selected_view == "User Management Portal":
                     if new_fullname and new_email:
                         try:
                             with engine.begin() as conn:
-                                # FIX FOR UNIQUE VIOLATION: Sync PostgreSQL ID sequence automatically before insert
+                                # FIX FOR UNIQUE VIOLATION: Sync PostgreSQL ID sequence automatically
                                 conn.execute(text("SELECT setval(pg_get_serial_sequence('user_accounts', 'id'), COALESCE(MAX(id), 1)) FROM user_accounts;"))
                                 conn.execute(
                                     text("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (:fn, :e, :p, :r, 1)"),
@@ -608,7 +642,7 @@ elif selected_view == "User Management Portal":
                 u_list = conn.execute(text(query_u), params_u).fetchall()
             
             if u_list:
-                u_dict = {f"{r[1]} ({r[2]}) - [{r[3]}]": (r[0], r[2], r[1], r[3]) for r in u_list}
+                u_dict = {f"{r[1] or r[2]} ({r[2]}) - [{r[3]}]": (r[0], r[2], r[1] or r[2], r[3]) for r in u_list}
                 selected_reset = st.selectbox("Select Filtered User Account:", list(u_dict.keys()))
                 send_reset_mail = st.checkbox("📧 Email New Password Directly to User", value=True, key="rst_m_chk")
                 
@@ -641,7 +675,7 @@ elif selected_view == "User Management Portal":
                 st.info("No matching users found.")
 
     st.markdown("---")
-    st.subheader("📋 Registered Users Masterlist")
+    st.subheader("📋 Registered Users Masterlist & Recent System Activity")
     df_users = load_db_table("user_accounts")
     if not df_users.empty and "password" in df_users.columns:
         df_users = df_users.drop(columns=["password"])
