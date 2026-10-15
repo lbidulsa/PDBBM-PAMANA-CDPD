@@ -537,7 +537,7 @@ if selected_view == "Executive Dashboard":
             st.info("No beneficiary records found.")
 
 # ---------------------------------------------------------
-# 6. USER MANAGEMENT PORTAL
+# 6. USER MANAGEMENT PORTAL (FIXED UNIQUE VIOLATION BUG)
 # ---------------------------------------------------------
 elif selected_view == "User Management Portal":
     st.subheader("👤 System User Management Portal")
@@ -565,6 +565,8 @@ elif selected_view == "User Management Portal":
                     if new_fullname and new_email:
                         try:
                             with engine.begin() as conn:
+                                # FIX FOR UNIQUE VIOLATION: Sync PostgreSQL ID sequence automatically before insert
+                                conn.execute(text("SELECT setval(pg_get_serial_sequence('user_accounts', 'id'), COALESCE(MAX(id), 1)) FROM user_accounts;"))
                                 conn.execute(
                                     text("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (:fn, :e, :p, :r, 1)"),
                                     {"fn": new_fullname, "e": new_email, "p": curr_temp_pass, "r": new_role}
@@ -946,6 +948,7 @@ else:
                         with col_left:
                             form_data["sp_id"] = st.text_input("Sub-Project ID / Code*", key="d_spid")
                             form_data["sp_name"] = st.text_input("Sub-Project Name", key="d_spname")
+                            form_data["municipality"] = st.selectbox("Municipality*", MUNICIPALITIES, key="d_mun")
                             form_data["dv_number"] = st.text_input("Disbursement Voucher (DV) No.*", key="d_dv")
                             form_data["check_number"] = st.text_input("Check / LDDAP No.", key="d_chk")
                             form_data["payee"] = st.text_input("Payee / Recipient", key="d_payee")
@@ -995,8 +998,42 @@ else:
                                         form_data
                                     )
 
-                                st.toast(f"✅ Record saved to {selected_view}!", icon="💾")
-                                st.success("Record saved to database successfully!")
+                                    # AUTO-REFLECT DISBURSEMENT TO SUMMARY MODULE LOGIC
+                                    if selected_view == "Disbursement":
+                                        d_mun = form_data.get("municipality")
+                                        d_amt = form_data.get("amount", 0.0)
+                                        
+                                        if d_mun:
+                                            # Check if summary record exists for municipality
+                                            sum_res = conn.execute(
+                                                text("SELECT total_disbursed, total_liquidated FROM summary WHERE lower(municipality) = lower(:m)"),
+                                                {"m": d_mun}
+                                            ).fetchone()
+
+                                            if sum_res:
+                                                curr_disb = float(sum_res[0] or 0.0) + float(d_amt)
+                                                curr_liq = float(sum_res[1] or 0.0)
+                                                new_unliq = curr_disb - curr_liq
+                                                
+                                                conn.execute(
+                                                    text("""
+                                                        UPDATE summary 
+                                                        SET total_disbursed = :td, unliquidated_balance = :ub 
+                                                        WHERE lower(municipality) = lower(:m)
+                                                    """),
+                                                    {"td": curr_disb, "ub": new_unliq, "m": d_mun}
+                                                )
+                                            else:
+                                                conn.execute(
+                                                    text("""
+                                                        INSERT INTO summary (municipality, total_sps, total_grant, total_disbursed, total_liquidated, unliquidated_balance)
+                                                        VALUES (:m, 1, :td, :td, 0.0, :td)
+                                                    """),
+                                                    {"m": d_mun, "td": float(d_amt)}
+                                                )
+
+                                st.toast(f"✅ Record saved to {selected_view} & Auto-Reflected to Summary!", icon="💾")
+                                st.success("Record saved and Summary Module updated successfully!")
                                 st.session_state["show_add_form"] = False
                                 st.rerun()
                             except Exception as ex:
