@@ -419,10 +419,34 @@ BARANGAY_ACTIVITIES = [
     "BAR", "OM", "2nd_BA", "Grievance_Intake", "GRS_Installation_Checklist", "CV", "ERS"
 ]
 
-TABS = [
+# --- ROLE-BASED NAVIGATION MODULE FILTERING ---
+# Note: User Management Portal is visible ONLY to Superuser
+ALL_TABS = [
     "Executive Dashboard", "User Management Portal", "CEAC_Municipal", "CEAC_Barangay", 
     "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "Summary", "Finance"
 ]
+
+current_role = st.session_state.get("user_role", "AC")
+
+if current_role == "Superuser":
+    TABS = ALL_TABS
+else:
+    # Dili magpakita ang User Management Portal sa laing roles
+    TABS = [tab for tab in ALL_TABS if tab != "User Management Portal"]
+
+# EDIT PERMISSION HELPER FUNCTION
+def can_edit_module(role, module):
+    if role in ["Superuser", "Admin"]:
+        return True
+    elif role == "AC" and module in ["CEAC_Municipal", "CEAC_Barangay", "Sub_Project_Closeout_Tracker"]:
+        return True
+    elif role == "TF" and module in ["Geotagged_Photos", "Sub_Project_Closeout_Tracker"]:
+        return True
+    elif role == "MFA" and module == "Disbursement":
+        return True
+    elif role == "MDM" and module in ["CEAC_Municipal", "CEAC_Barangay"]:
+        return True
+    return False
 
 def save_uploaded_file(file_obj):
     if file_obj is not None:
@@ -559,9 +583,13 @@ if selected_view == "Executive Dashboard":
             st.info("No beneficiary records found.")
 
 # ---------------------------------------------------------
-# 6. USER MANAGEMENT PORTAL (SUPERUSER / ADMIN LIVE USER MONITOR)
+# 6. USER MANAGEMENT PORTAL (SUPERUSER ONLY)
 # ---------------------------------------------------------
 elif selected_view == "User Management Portal":
+    if current_role != "Superuser":
+        st.error("⛔ ACCESS DENIED: Only Superuser can access the User Management Portal.")
+        st.stop()
+        
     st.subheader("👤 System User Management & Live Login Monitor")
     
     if "gen_temp_pass" not in st.session_state:
@@ -569,7 +597,7 @@ elif selected_view == "User Management Portal":
     
     USER_ROLES_LIST = ["Superuser", "Admin", "AC", "TF", "MFA", "MDM"]
 
-    # --- SUPERUSER / ADMIN LIVE LOGGED USERS AUDIT SECTION ---
+    # --- SUPERUSER LIVE LOGGED USERS AUDIT SECTION ---
     st.markdown("##### 🔴 Live System User Login Activity & Audit Log:")
     
     with engine.connect() as conn:
@@ -579,11 +607,10 @@ elif selected_view == "User Management Portal":
         col_act1, col_act2 = st.columns([2, 1])
         with col_act1:
             st.markdown("###### **Recently Active Users / Login Sessions:**")
-            for u in active_logs[:5]: # Top 5 latest logins
+            for u in active_logs[:5]:
                 u_name = u[1] if (u[1] and str(u[1]).lower() != "none") else u[2]
                 last_time = u[4].strftime("%B %d, %Y - %I:%M %p") if u[4] else "Never Logged In"
                 
-                # Check if user is current session user
                 is_curr = "🟢 CURRENT SESSION ONLINE" if u[2] == st.session_state["user_email"] else f"🕒 Last Online: {last_time}"
                 
                 st.markdown(f"""
@@ -602,95 +629,93 @@ elif selected_view == "User Management Portal":
     col_u1, col_u2 = st.columns(2)
     
     with col_u1:
-        if st.session_state["user_role"] in ["Superuser", "Admin"]:
-            st.markdown("##### ➕ Add New System User")
-            with st.form("add_user_form", clear_on_submit=True):
-                new_fullname = st.text_input("Full Name*")
-                new_email = st.text_input("User Email Address*").strip()
-                new_role = st.selectbox("Assigned Role*", USER_ROLES_LIST)
-                
-                curr_temp_pass = st.session_state["gen_temp_pass"]
-                st.text_input("Generated Temporary Password (Auto):", value=curr_temp_pass, disabled=True)
-                send_via_email = st.checkbox("📧 Send Credentials via Direct Email to User", value=True)
-                
-                submit_user = st.form_submit_button("💾 Create User Account", use_container_width=True)
-                if submit_user:
-                    if new_fullname and new_email:
-                        try:
-                            with engine.begin() as conn:
-                                conn.execute(text("SELECT setval(pg_get_serial_sequence('user_accounts', 'id'), COALESCE(MAX(id), 1)) FROM user_accounts;"))
-                                conn.execute(
-                                    text("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (:fn, :e, :p, :r, 1)"),
-                                    {"fn": new_fullname, "e": new_email, "p": curr_temp_pass, "r": new_role}
-                                )
-                            
-                            st.toast(f"✅ User '{new_fullname}' created!", icon="👤")
-                            st.success(f"✅ User '{new_fullname}' ({new_role}) successfully created!")
-                            
-                            if send_via_email:
-                                sent_ok, msg_res = send_credentials_email(new_email, new_fullname, curr_temp_pass, new_role)
-                                if sent_ok:
-                                    st.success(f"📩 Account credentials emailed directly to {new_email}!")
-                                else:
-                                    st.warning(f"⚠️ Email dispatch status: {msg_res}")
-                                    st.info(f"🔑 **BACKUP DISPLAY PASS:** `{curr_temp_pass}`")
-                            else:
-                                st.info(f"🔑 **USER TEMPORARY PASS:** `{curr_temp_pass}`")
-                                    
-                            st.session_state["gen_temp_pass"] = generate_random_password()
-                            st.rerun()
-                        except Exception as ex:
-                            st.error(f"⚠️ Error creating user account: {ex}")
-                    else:
-                        st.error("Please fill in Full Name and Email Address.")
-
-    with col_u2:
-        if st.session_state["user_role"] in ["Superuser", "Admin"]:
-            st.markdown("##### 🔑 Reset User Password (with Live Search)")
-            user_search = st.text_input("🔍 Search User Name or Email:")
+        st.markdown("##### ➕ Add New System User")
+        with st.form("add_user_form", clear_on_submit=True):
+            new_fullname = st.text_input("Full Name*")
+            new_email = st.text_input("User Email Address*").strip()
+            new_role = st.selectbox("Assigned Role*", USER_ROLES_LIST)
             
-            query_u = "SELECT id, full_name, email, user_role FROM user_accounts WHERE user_role != 'Superuser'"
-            params_u = {}
+            curr_temp_pass = st.session_state["gen_temp_pass"]
+            st.text_input("Generated Temporary Password (Auto):", value=curr_temp_pass, disabled=True)
+            send_via_email = st.checkbox("📧 Send Credentials via Direct Email to User", value=True)
             
-            if user_search:
-                query_u += " AND (lower(full_name) LIKE lower(:s) OR lower(email) LIKE lower(:s))"
-                params_u["s"] = f"%{user_search.strip()}%"
-                
-            with engine.connect() as conn:
-                u_list = conn.execute(text(query_u), params_u).fetchall()
-            
-            if u_list:
-                u_dict = {f"{r[1] or r[2]} ({r[2]}) - [{r[3]}]": (r[0], r[2], r[1] or r[2], r[3]) for r in u_list}
-                selected_reset = st.selectbox("Select Filtered User Account:", list(u_dict.keys()))
-                send_reset_mail = st.checkbox("📧 Email New Password Directly to User", value=True, key="rst_m_chk")
-                
-                if st.button("🔄 Reset Password Now", use_container_width=True):
-                    r_id, r_email, r_name, r_role = u_dict[selected_reset]
-                    new_temp = generate_random_password()
-                    
+            submit_user = st.form_submit_button("💾 Create User Account", use_container_width=True)
+            if submit_user:
+                if new_fullname and new_email:
                     try:
                         with engine.begin() as conn:
+                            conn.execute(text("SELECT setval(pg_get_serial_sequence('user_accounts', 'id'), COALESCE(MAX(id), 1)) FROM user_accounts;"))
                             conn.execute(
-                                text("UPDATE user_accounts SET password = :p, require_change_pass = 1 WHERE id = :id"),
-                                {"p": new_temp, "id": r_id}
+                                text("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (:fn, :e, :p, :r, 1)"),
+                                {"fn": new_fullname, "e": new_email, "p": curr_temp_pass, "r": new_role}
                             )
                         
-                        st.toast("🔑 Password reset initiated!", icon="🔐")
-                        st.success(f"✅ Reset Password initiated for {r_email}!")
+                        st.toast(f"✅ User '{new_fullname}' created!", icon="👤")
+                        st.success(f"✅ User '{new_fullname}' ({new_role}) successfully created!")
                         
-                        if send_reset_mail:
-                            sent_ok, msg_res = send_credentials_email(r_email, r_name, new_temp, r_role)
+                        if send_via_email:
+                            sent_ok, msg_res = send_credentials_email(new_email, new_fullname, curr_temp_pass, new_role)
                             if sent_ok:
-                                st.success(f"📩 Reset password emailed directly to {r_email}!")
+                                st.success(f"📩 Account credentials emailed directly to {new_email}!")
                             else:
                                 st.warning(f"⚠️ Email dispatch status: {msg_res}")
-                                st.info(f"🔑 **BACKUP RESET PASS:** `{new_temp}`")
+                                st.info(f"🔑 **BACKUP DISPLAY PASS:** `{curr_temp_pass}`")
                         else:
-                            st.info(f"🔑 **NEW TEMPORARY PASS:** `{new_temp}`")
+                            st.info(f"🔑 **USER TEMPORARY PASS:** `{curr_temp_pass}`")
+                                
+                        st.session_state["gen_temp_pass"] = generate_random_password()
+                        st.rerun()
                     except Exception as ex:
-                        st.error(f"❌ DATABASE ERROR: {ex}")
-            else:
-                st.info("No matching users found.")
+                        st.error(f"⚠️ Error creating user account: {ex}")
+                else:
+                    st.error("Please fill in Full Name and Email Address.")
+
+    with col_u2:
+        st.markdown("##### 🔑 Reset User Password (with Live Search)")
+        user_search = st.text_input("🔍 Search User Name or Email:")
+        
+        query_u = "SELECT id, full_name, email, user_role FROM user_accounts WHERE user_role != 'Superuser'"
+        params_u = {}
+        
+        if user_search:
+            query_u += " AND (lower(full_name) LIKE lower(:s) OR lower(email) LIKE lower(:s))"
+            params_u["s"] = f"%{user_search.strip()}%"
+            
+        with engine.connect() as conn:
+            u_list = conn.execute(text(query_u), params_u).fetchall()
+        
+        if u_list:
+            u_dict = {f"{r[1] or r[2]} ({r[2]}) - [{r[3]}]": (r[0], r[2], r[1] or r[2], r[3]) for r in u_list}
+            selected_reset = st.selectbox("Select Filtered User Account:", list(u_dict.keys()))
+            send_reset_mail = st.checkbox("📧 Email New Password Directly to User", value=True, key="rst_m_chk")
+            
+            if st.button("🔄 Reset Password Now", use_container_width=True):
+                r_id, r_email, r_name, r_role = u_dict[selected_reset]
+                new_temp = generate_random_password()
+                
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(
+                            text("UPDATE user_accounts SET password = :p, require_change_pass = 1 WHERE id = :id"),
+                            {"p": new_temp, "id": r_id}
+                        )
+                    
+                    st.toast("🔑 Password reset initiated!", icon="🔐")
+                    st.success(f"✅ Reset Password initiated for {r_email}!")
+                    
+                    if send_reset_mail:
+                        sent_ok, msg_res = send_credentials_email(r_email, r_name, new_temp, r_role)
+                        if sent_ok:
+                            st.success(f"📩 Reset password emailed directly to {r_email}!")
+                        else:
+                            st.warning(f"⚠️ Email dispatch status: {msg_res}")
+                            st.info(f"🔑 **BACKUP RESET PASS:** `{new_temp}`")
+                    else:
+                        st.info(f"🔑 **NEW TEMPORARY PASS:** `{new_temp}`")
+                except Exception as ex:
+                    st.error(f"❌ DATABASE ERROR: {ex}")
+        else:
+            st.info("No matching users found.")
 
     st.markdown("---")
     st.subheader("📋 Registered Users Masterlist & Login Timestamps")
@@ -705,63 +730,67 @@ elif selected_view == "User Management Portal":
 elif selected_view == "Geotagged_Photos":
     st.subheader("📸 Geotagged Photos & Progress File Uploads")
     
-    with st.expander("📤 Upload New Geotagged Photo", expanded=True):
-        uploaded_file = st.file_uploader("Choose Photo / File (JPG / PNG)", type=["jpg", "jpeg", "png", "pdf"], key="geo_upl_file")
-        
-        detected_lat, detected_lon = "", ""
-        if uploaded_file and uploaded_file.type in ["image/jpeg", "image/png"]:
-            exif_lat, exif_lon = extract_gps_from_image(uploaded_file)
-            if exif_lat and exif_lon:
-                detected_lat, detected_lon = exif_lat, exif_lon
-                st.success(f"⚡ **AUTO-DETECTED GPS EXIF METADATA:** Latitude: `{detected_lat}` | Longitude: `{detected_lon}`")
-            else:
-                st.warning("⚠️ No EXIF GPS metadata found in photo. Attempting live browser location or manual entry...")
-                if HAS_GEO_EVAL:
-                    location = get_geolocation()
-                    if location and 'coords' in location:
-                        detected_lat = str(round(location['coords']['latitude'], 6))
-                        detected_lon = str(round(location['coords']['longitude'], 6))
-                        st.info(f"🌐 **BROWSER LIVE GPS DETECTED:** Latitude: `{detected_lat}` | Longitude: `{detected_lon}`")
-
-        with st.form("photo_upload_form", clear_on_submit=True):
-            col_u1, col_u2 = st.columns(2)
-            with col_u1:
-                sp_id = st.text_input("Sub-Project ID / Code*")
-                sp_name = st.text_input("Sub-Project Name")
-                stage = st.selectbox("Stage", ["BEFORE Construction", "DURING Construction", "AFTER / Completed"])
-                latitude = st.text_input("Latitude (GPS)*", value=detected_lat)
-            with col_u2:
-                longitude = st.text_input("Longitude (GPS)*", value=detected_lon)
-                st.caption("📷 File preview or auto-detected metadata will reflect automatically.")
-
-            submit_photo = st.form_submit_button("⬆️ Submit & Save Photo")
-            if submit_photo:
-                if not uploaded_file or not sp_id.strip():
-                    st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug mag-upload og file ug isulat ang Sub-Project ID!")
+    # Check if current user role has edit access to Geotagged Photos
+    if can_edit_module(current_role, "Geotagged_Photos"):
+        with st.expander("📤 Upload New Geotagged Photo", expanded=True):
+            uploaded_file = st.file_uploader("Choose Photo / File (JPG / PNG)", type=["jpg", "jpeg", "png", "pdf"], key="geo_upl_file")
+            
+            detected_lat, detected_lon = "", ""
+            if uploaded_file and uploaded_file.type in ["image/jpeg", "image/png"]:
+                exif_lat, exif_lon = extract_gps_from_image(uploaded_file)
+                if exif_lat and exif_lon:
+                    detected_lat, detected_lon = exif_lat, exif_lon
+                    st.success(f"⚡ **AUTO-DETECTED GPS EXIF METADATA:** Latitude: `{detected_lat}` | Longitude: `{detected_lon}`")
                 else:
-                    try:
-                        file_path = os.path.join("uploaded_photos", uploaded_file.name)
-                        with open(file_path, "wb") as f:
-                            f.write(uploaded_file.getbuffer())
+                    st.warning("⚠️ No EXIF GPS metadata found in photo. Attempting live browser location or manual entry...")
+                    if HAS_GEO_EVAL:
+                        location = get_geolocation()
+                        if location and 'coords' in location:
+                            detected_lat = str(round(location['coords']['latitude'], 6))
+                            detected_lon = str(round(location['coords']['longitude'], 6))
+                            st.info(f"🌐 **BROWSER LIVE GPS DETECTED:** Latitude: `{detected_lat}` | Longitude: `{detected_lon}`")
 
-                        with engine.begin() as conn:
-                            conn.execute(
-                                text("""
-                                    INSERT INTO geotagged_photos (sp_id, sp_name, stage, latitude, longitude, photo_file, date_uploaded, encoder)
-                                    VALUES (:sp_id, :sp_name, :stage, :lat, :lon, :file, CURRENT_DATE, :encoder)
-                                """),
-                                {
-                                    "sp_id": sp_id.strip(), "sp_name": sp_name, "stage": stage,
-                                    "lat": latitude, "lon": longitude, "file": uploaded_file.name,
-                                    "encoder": st.session_state["user_name"]
-                                }
-                            )
+            with st.form("photo_upload_form", clear_on_submit=True):
+                col_u1, col_u2 = st.columns(2)
+                with col_u1:
+                    sp_id = st.text_input("Sub-Project ID / Code*")
+                    sp_name = st.text_input("Sub-Project Name")
+                    stage = st.selectbox("Stage", ["BEFORE Construction", "DURING Construction", "AFTER / Completed"])
+                    latitude = st.text_input("Latitude (GPS)*", value=detected_lat)
+                with col_u2:
+                    longitude = st.text_input("Longitude (GPS)*", value=detected_lon)
+                    st.caption("📷 File preview or auto-detected metadata will reflect automatically.")
 
-                        st.toast("✅ Geotagged photo saved to Supabase!", icon="📸")
-                        st.success(f"Photo '{uploaded_file.name}' saved to database successfully!")
-                        st.rerun()
-                    except Exception as ex:
-                        st.error(f"❌ DATABASE ERROR: {ex}")
+                submit_photo = st.form_submit_button("⬆️ Submit & Save Photo")
+                if submit_photo:
+                    if not uploaded_file or not sp_id.strip():
+                        st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug mag-upload og file ug isulat ang Sub-Project ID!")
+                    else:
+                        try:
+                            file_path = os.path.join("uploaded_photos", uploaded_file.name)
+                            with open(file_path, "wb") as f:
+                                f.write(uploaded_file.getbuffer())
+
+                            with engine.begin() as conn:
+                                conn.execute(
+                                    text("""
+                                        INSERT INTO geotagged_photos (sp_id, sp_name, stage, latitude, longitude, photo_file, date_uploaded, encoder)
+                                        VALUES (:sp_id, :sp_name, :stage, :lat, :lon, :file, CURRENT_DATE, :encoder)
+                                    """),
+                                    {
+                                        "sp_id": sp_id.strip(), "sp_name": sp_name, "stage": stage,
+                                        "lat": latitude, "lon": longitude, "file": uploaded_file.name,
+                                        "encoder": st.session_state["user_name"]
+                                    }
+                                )
+
+                            st.toast("✅ Geotagged photo saved to Supabase!", icon="📸")
+                            st.success(f"Photo '{uploaded_file.name}' saved to database successfully!")
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"❌ DATABASE ERROR: {ex}")
+    else:
+        st.info(f"👁️ **VIEW-ONLY MODE:** Your assigned role (`{current_role}`) is restricted from uploading new photos in this module.")
 
     st.markdown("---")
     st.subheader("📋 Listed Geotagged Photos Records")
@@ -804,291 +833,297 @@ elif selected_view == "Finance":
 else:
     st.subheader(f"📋 Data Management & Encoding: {selected_view}")
 
-    if st.button("➕ Add New Activity / Record", use_container_width=True):
-        st.session_state["show_add_form"] = not st.session_state.get("show_add_form", False)
+    # Check permission to edit/add entry for current module
+    has_edit_perm = can_edit_module(current_role, selected_view)
 
-    if st.session_state.get("show_add_form", True):
-        with st.expander(f"📝 Comprehensive Entry Form: {selected_view}", expanded=True):
-            
-            if selected_view == "CEAC_Municipal":
-                col_left, col_right = st.columns(2)
-                with col_left:
-                    selected_m_act = st.selectbox("Select Municipal Activity", MUNICIPALITIES if selected_view == "Summary" else MUNICIPAL_ACTIVITIES, key="cm_act")
-                    cm_region = st.selectbox("Region", REGIONS, key="cm_reg")
-                    cm_province = st.selectbox("Province", PROVINCES, key="cm_prov")
-                    cm_municipality = st.selectbox("Municipality", MUNICIPALITIES, key="cm_mun")
-                    cm_cycle = st.selectbox("Cycle / Batch", CYCLE_BATCHES, key="cm_cyc")
-                    cm_date = st.date_input("Activity Date", datetime.date.today(), key="cm_dt").strftime("%Y-%m-%d")
+    if has_edit_perm:
+        if st.button("➕ Add New Activity / Record", use_container_width=True):
+            st.session_state["show_add_form"] = not st.session_state.get("show_add_form", False)
+
+        if st.session_state.get("show_add_form", True):
+            with st.expander(f"📝 Comprehensive Entry Form: {selected_view}", expanded=True):
                 
-                with col_right:
-                    cm_date_enc = datetime.date.today().strftime("%Y-%m-%d")
-                    st.text_input("Date Encoded (Auto)", value=cm_date_enc, disabled=True, key="cm_de_dis")
-                    cm_encoder = st.session_state["user_name"]
-                    st.text_input("Encoded By (Auto Logged User)", value=cm_encoder, disabled=True, key="cm_eb_dis")
-                    cm_mov_st = st.selectbox("MOV Status", MOV_STATUSES, key="cm_mov_st")
-                    cm_enc_st = st.selectbox("Encoded Status", ENCODED_OPTIONS, key="cm_enc_st")
-                    cm_remarks = st.text_area("Remarks", key="cm_rem")
-
-                st.markdown("---")
-                
-                if selected_m_act == "GRS Instake":
-                    st.markdown("##### 📁 Upload GRS Intake Files (Multiple Upload - Up to 10 Files)")
-                    grs_files = st.file_uploader("Choose GRS Files (Max 10)", type=["pdf", "png", "jpg", "jpeg", "docx"], accept_multiple_files=True, key="cm_grs_files")
-                    if grs_files and len(grs_files) > 10:
-                        st.error("⚠️ Exceeded maximum 10 files! Processing only the first 10 files.")
-                        grs_files = grs_files[:10]
+                if selected_view == "CEAC_Municipal":
+                    col_left, col_right = st.columns(2)
+                    with col_left:
+                        selected_m_act = st.selectbox("Select Municipal Activity", MUNICIPALITIES if selected_view == "Summary" else MUNICIPAL_ACTIVITIES, key="cm_act")
+                        cm_region = st.selectbox("Region", REGIONS, key="cm_reg")
+                        cm_province = st.selectbox("Province", PROVINCES, key="cm_prov")
+                        cm_municipality = st.selectbox("Municipality", MUNICIPALITIES, key="cm_mun")
+                        cm_cycle = st.selectbox("Cycle / Batch", CYCLE_BATCHES, key="cm_cyc")
+                        cm_date = st.date_input("Activity Date", datetime.date.today(), key="cm_dt").strftime("%Y-%m-%d")
                     
-                    att_saved, min_saved, lgu_saved = "N/A - GRS Intake", "N/A - GRS Intake", "N/A - GRS Intake"
-                    grs_saved = save_multiple_files(grs_files)
-                else:
-                    st.markdown("##### 📁 Upload MOVs (Separate Buttons for Municipal Activities)")
-                    mov_col1, mov_col2, mov_col3 = st.columns(3)
-                    with mov_col1:
-                        st.markdown("**1. Upload Attendance**")
-                        att_file = st.file_uploader("Choose Attendance File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_att")
-                        att_saved = save_uploaded_file(att_file)
+                    with col_right:
+                        cm_date_enc = datetime.date.today().strftime("%Y-%m-%d")
+                        st.text_input("Date Encoded (Auto)", value=cm_date_enc, disabled=True, key="cm_de_dis")
+                        cm_encoder = st.session_state["user_name"]
+                        st.text_input("Encoded By (Auto Logged User)", value=cm_encoder, disabled=True, key="cm_eb_dis")
+                        cm_mov_st = st.selectbox("MOV Status", MOV_STATUSES, key="cm_mov_st")
+                        cm_enc_st = st.selectbox("Encoded Status", ENCODED_OPTIONS, key="cm_enc_st")
+                        cm_remarks = st.text_area("Remarks", key="cm_rem")
 
-                    with mov_col2:
-                        st.markdown("**2. Upload Minutes of Activity**")
-                        min_file = st.file_uploader("Choose Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_min")
-                        min_saved = save_uploaded_file(min_file)
-
-                    with mov_col3:
-                        st.markdown("**3. Upload LGU Minutes of Activity**")
-                        lgu_min_file = st.file_uploader("Choose LGU Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_lgu_min")
-                        lgu_saved = save_uploaded_file(lgu_min_file)
+                    st.markdown("---")
                     
-                    grs_saved = ""
-
-                st.markdown("---")
-                b1, b2, b3 = st.columns([2, 2, 1])
-                if b1.button("💾 Save Record to Database", use_container_width=True, key="cm_save_btn"):
-                    try:
-                        with engine.begin() as conn:
-                            conn.execute(
-                                text("""
-                                    INSERT INTO ceac_municipal (activity_name, region, province, municipality, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_minutes, mov_lgu_minutes, mov_grs_files, remarks)
-                                    VALUES (:act, :reg, :prov, :mun, :cyc, :dt, :denc, :enc, :mst, :est, :att, :min, :lgu, :grs, :rem)
-                                """),
-                                {
-                                    "act": selected_m_act, "reg": cm_region, "prov": cm_province, "mun": cm_municipality,
-                                    "cyc": cm_cycle, "dt": cm_date, "denc": cm_date_enc, "enc": cm_encoder,
-                                    "mst": cm_mov_st, "est": cm_enc_st, "att": att_saved, "min": min_saved,
-                                    "lgu": lgu_saved, "grs": grs_saved, "rem": cm_remarks
-                                }
-                            )
-                        st.toast("✅ Municipal Activity record saved to Supabase!", icon="🎉")
-                        st.success("Municipal Activity record saved to database successfully!")
-                        st.session_state["show_add_form"] = False
-                        st.rerun()
-                    except Exception as ex:
-                        st.error(f"❌ DATABASE ERROR: {ex}")
-
-            elif selected_view == "CEAC_Barangay":
-                col_left, col_right = st.columns(2)
-                with col_left:
-                    selected_b_act = st.selectbox("Select Barangay Activity", BARANGAY_ACTIVITIES, key="cb_act")
-                    cb_region = st.selectbox("Region", REGIONS, key="cb_reg")
-                    cb_province = st.selectbox("Province", PROVINCES, key="cb_prov")
-                    cb_municipality = st.selectbox("Municipality", MUNICIPALITIES, key="cb_mun")
-                    cb_barangay = st.text_input("Barangay Name*", key="cb_brgy")
-                    cb_cycle = st.selectbox("Cycle / Batch", CYCLE_BATCHES, key="cb_cyc")
-                    cb_date = st.date_input("Activity Date", datetime.date.today(), key="cb_dt").strftime("%Y-%m-%d")
-                
-                with col_right:
-                    cb_date_enc = datetime.date.today().strftime("%Y-%m-%d")
-                    st.text_input("Date Encoded (Auto)", value=cb_date_enc, disabled=True, key="cb_de_dis")
-                    cb_encoder = st.session_state["user_name"]
-                    st.text_input("Encoded By (Auto Logged User)", value=cb_encoder, disabled=True, key="cb_eb_dis")
-                    cb_mov_st = st.selectbox("MOV Status", MOV_STATUSES, key="cb_mov_st")
-                    cb_enc_st = st.selectbox("Encoded Status", ENCODED_OPTIONS, key="cb_enc_st")
-                    cb_remarks = st.text_area("Remarks", key="cb_rem")
-
-                st.markdown("---")
-                
-                if selected_b_act == "CV":
-                    st.markdown("##### 📁 Upload CV Files (Multiple Upload - Up to 30 CVs)")
-                    cv_files = st.file_uploader("Choose CV Files (Max 30)", type=["pdf", "png", "jpg", "jpeg", "docx"], accept_multiple_files=True, key="cb_cv_files")
-                    if cv_files and len(cv_files) > 30:
-                        st.error("⚠️ Exceeded maximum 30 files! Processing only the first 30 files.")
-                        cv_files = cv_files[:30]
-                    
-                    att_saved, brgy_min_saved, lgu_saved = "N/A - CV", "N/A - CV", "N/A - CV"
-                    cv_saved = save_multiple_files(cv_files)
-                else:
-                    st.markdown("##### 📁 Upload MOVs (Separate Buttons for Barangay Activities)")
-                    mov_col1, mov_col2, mov_col3 = st.columns(3)
-                    with mov_col1:
-                        st.markdown("**1. Upload Attendance**")
-                        att_file = st.file_uploader("Choose Attendance File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_att")
-                        att_saved = save_uploaded_file(att_file)
-
-                    with mov_col2:
-                        st.markdown("**2. Upload Brgy Minutes of Activity**")
-                        brgy_min_file = st.file_uploader("Choose Brgy Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_brgy_min")
-                        brgy_min_saved = save_uploaded_file(brgy_min_file)
-
-                    with mov_col3:
-                        st.markdown("**3. Upload LGU Minutes of Activity**")
-                        lgu_min_file = st.file_uploader("Choose LGU Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_lgu_min")
-                        lgu_saved = save_uploaded_file(lgu_min_file)
-                    
-                    cv_saved = ""
-
-                st.markdown("---")
-                b1, b2, b3 = st.columns([2, 2, 1])
-                if b1.button("💾 Save Record to Database", use_container_width=True, key="cb_save_btn"):
-                    if not cb_barangay.strip():
-                        st.error("⚠️ **REQUIRED FIELD MISSING:** Palihug sulati ang Barangay Name!")
+                    if selected_m_act == "GRS Instake":
+                        st.markdown("##### 📁 Upload GRS Intake Files (Multiple Upload - Up to 10 Files)")
+                        grs_files = st.file_uploader("Choose GRS Files (Max 10)", type=["pdf", "png", "jpg", "jpeg", "docx"], accept_multiple_files=True, key="cm_grs_files")
+                        if grs_files and len(grs_files) > 10:
+                            st.error("⚠️ Exceeded maximum 10 files! Processing only the first 10 files.")
+                            grs_files = grs_files[:10]
+                        
+                        att_saved, min_saved, lgu_saved = "N/A - GRS Intake", "N/A - GRS Intake", "N/A - GRS Intake"
+                        grs_saved = save_multiple_files(grs_files)
                     else:
+                        st.markdown("##### 📁 Upload MOVs (Separate Buttons for Municipal Activities)")
+                        mov_col1, mov_col2, mov_col3 = st.columns(3)
+                        with mov_col1:
+                            st.markdown("**1. Upload Attendance**")
+                            att_file = st.file_uploader("Choose Attendance File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_att")
+                            att_saved = save_uploaded_file(att_file)
+
+                        with mov_col2:
+                            st.markdown("**2. Upload Minutes of Activity**")
+                            min_file = st.file_uploader("Choose Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_min")
+                            min_saved = save_uploaded_file(min_file)
+
+                        with mov_col3:
+                            st.markdown("**3. Upload LGU Minutes of Activity**")
+                            lgu_min_file = st.file_uploader("Choose LGU Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_lgu_min")
+                            lgu_saved = save_uploaded_file(lgu_min_file)
+                        
+                        grs_saved = ""
+
+                    st.markdown("---")
+                    b1, b2, b3 = st.columns([2, 2, 1])
+                    if b1.button("💾 Save Record to Database", use_container_width=True, key="cm_save_btn"):
                         try:
                             with engine.begin() as conn:
                                 conn.execute(
                                     text("""
-                                        INSERT INTO ceac_barangay (activity_name, region, province, municipality, barangay, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_brgy_minutes, mov_lgu_minutes, mov_cv_files, remarks)
-                                        VALUES (:act, :reg, :prov, :mun, :brgy, :cyc, :dt, :denc, :enc, :mst, :est, :att, :bmin, :lgu, :cv, :rem)
+                                        INSERT INTO ceac_municipal (activity_name, region, province, municipality, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_minutes, mov_lgu_minutes, mov_grs_files, remarks)
+                                        VALUES (:act, :reg, :prov, :mun, :cyc, :dt, :denc, :enc, :mst, :est, :att, :min, :lgu, :grs, :rem)
                                     """),
                                     {
-                                        "act": selected_b_act, "reg": cb_region, "prov": cb_province, "mun": cb_municipality,
-                                        "brgy": cb_barangay.strip(), "cyc": cb_cycle, "dt": cb_date, "denc": cb_date_enc,
-                                        "enc": cb_encoder, "mst": cb_mov_st, "est": cb_enc_st, "att": att_saved,
-                                        "bmin": brgy_min_saved, "lgu": lgu_saved, "cv": cv_saved, "rem": cb_remarks
+                                        "act": selected_m_act, "reg": cm_region, "prov": cm_province, "mun": cm_municipality,
+                                        "cyc": cm_cycle, "dt": cm_date, "denc": cm_date_enc, "enc": cm_encoder,
+                                        "mst": cm_mov_st, "est": cm_enc_st, "att": att_saved, "min": min_saved,
+                                        "lgu": lgu_saved, "grs": grs_saved, "rem": cm_remarks
                                     }
                                 )
-                            st.toast("✅ Barangay Activity record saved to Supabase!", icon="🎉")
-                            st.success("Barangay Activity record saved to database successfully!")
+                            st.toast("✅ Municipal Activity record saved to Supabase!", icon="🎉")
+                            st.success("Municipal Activity record saved to database successfully!")
                             st.session_state["show_add_form"] = False
                             st.rerun()
                         except Exception as ex:
                             st.error(f"❌ DATABASE ERROR: {ex}")
 
-            else:
-                with st.form(f"form_add_{selected_view}"):
-                    form_data = {}
+                elif selected_view == "CEAC_Barangay":
                     col_left, col_right = st.columns(2)
+                    with col_left:
+                        selected_b_act = st.selectbox("Select Barangay Activity", BARANGAY_ACTIVITIES, key="cb_act")
+                        cb_region = st.selectbox("Region", REGIONS, key="cb_reg")
+                        cb_province = st.selectbox("Province", PROVINCES, key="cb_prov")
+                        cb_municipality = st.selectbox("Municipality", MUNICIPALITIES, key="cb_mun")
+                        cb_barangay = st.text_input("Barangay Name*", key="cb_brgy")
+                        cb_cycle = st.selectbox("Cycle / Batch", CYCLE_BATCHES, key="cb_cyc")
+                        cb_date = st.date_input("Activity Date", datetime.date.today(), key="cb_dt").strftime("%Y-%m-%d")
+                    
+                    with col_right:
+                        cb_date_enc = datetime.date.today().strftime("%Y-%m-%d")
+                        st.text_input("Date Encoded (Auto)", value=cb_date_enc, disabled=True, key="cb_de_dis")
+                        cb_encoder = st.session_state["user_name"]
+                        st.text_input("Encoded By (Auto Logged User)", value=cb_encoder, disabled=True, key="cb_eb_dis")
+                        cb_mov_st = st.selectbox("MOV Status", MOV_STATUSES, key="cb_mov_st")
+                        cb_enc_st = st.selectbox("Encoded Status", ENCODED_OPTIONS, key="cb_enc_st")
+                        cb_remarks = st.text_area("Remarks", key="cb_rem")
 
-                    if selected_view == "Sub_Project_Closeout_Tracker":
-                        with col_left:
-                            form_data["sp_id"] = st.text_input("Sub-Project ID / Code*", key="sp_id_in")
-                            form_data["sp_name"] = st.text_input("Sub-Project Name*", key="sp_name_in")
-                            form_data["municipality"] = st.selectbox("Municipality", MUNICIPALITIES, key="sp_mun")
-                            form_data["barangay"] = st.text_input("Barangay Name", key="sp_brgy")
-                            form_data["cycle_batch"] = st.selectbox("Cycle / Batch", CYCLE_BATCHES, key="sp_cyc")
-                            form_data["functionality_audit_status"] = st.selectbox("Functionality Audit Status", CLOSEOUT_STATUSES, key="sp_fas")
-                            form_data["functionality_audit_date"] = st.date_input("Functionality Audit Date", datetime.date.today(), key="sp_fad").strftime("%Y-%m-%d")
-                            form_data["spcr_status"] = st.selectbox("SPCR Status", CLOSEOUT_STATUSES, key="sp_spcrs")
-                            form_data["spcr_date_submitted"] = st.date_input("SPCR Date Submitted", datetime.date.today(), key="sp_spcrd").strftime("%Y-%m-%d")
+                    st.markdown("---")
+                    
+                    if selected_b_act == "CV":
+                        st.markdown("##### 📁 Upload CV Files (Multiple Upload - Up to 30 CVs)")
+                        cv_files = st.file_uploader("Choose CV Files (Max 30)", type=["pdf", "png", "jpg", "jpeg", "docx"], accept_multiple_files=True, key="cb_cv_files")
+                        if cv_files and len(cv_files) > 30:
+                            st.error("⚠️ Exceeded maximum 30 files! Processing only the first 30 files.")
+                            cv_files = cv_files[:30]
                         
-                        with col_right:
-                            form_data["closing_accounts_status"] = st.selectbox("Closing Accounts Status", CLOSEOUT_STATUSES, key="sp_cas")
-                            form_data["date_account_closed"] = st.date_input("Date Account Closed", datetime.date.today(), key="sp_dac").strftime("%Y-%m-%d")
-                            form_data["booking_assets_status"] = st.selectbox("Booking Assets Status", CLOSEOUT_STATUSES, key="sp_bas")
-                            form_data["date_booking_assets"] = st.date_input("Date Booking Assets", datetime.date.today(), key="sp_dba").strftime("%Y-%m-%d")
-                            form_data["overall_closeout_status"] = st.selectbox("Overall Closeout Status", ["Ongoing Implementation", "For Closeout", "Fully Closed & Turned Over", "On Hold"], key="sp_ocs")
-                            form_data["encoded_status"] = st.selectbox("Encoded Status", ENCODED_OPTIONS, key="sp_enc")
-                            form_data["target_hhs"] = st.number_input("Target HHs", min_value=0, step=1, key="sp_thh")
-                            form_data["actual_hhs"] = st.number_input("Actual HHs", min_value=0, step=1, key="sp_ahh")
-                            form_data["male_beneficiaries"] = st.number_input("Male Beneficiaries", min_value=0, step=1, key="sp_mb")
-                            form_data["female_beneficiaries"] = st.number_input("Female Beneficiaries", min_value=0, step=1, key="sp_fb")
-                            form_data["remarks"] = st.text_area("Remarks", key="sp_rem")
-                            form_data["mov_file"] = ""
-
-                        form_data["total_beneficiaries"] = form_data["male_beneficiaries"] + form_data["female_beneficiaries"]
-                        form_data["hh_variance"] = form_data["actual_hhs"] - form_data["target_hhs"]
-
-                    elif selected_view == "Disbursement":
-                        with col_left:
-                            form_data["sp_id"] = st.text_input("Sub-Project ID / Code*", key="d_spid")
-                            form_data["sp_name"] = st.text_input("Sub-Project Name", key="d_spname")
-                            form_data["municipality"] = st.selectbox("Municipality*", MUNICIPALITIES, key="d_mun")
-                            form_data["dv_number"] = st.text_input("Disbursement Voucher (DV) No.*", key="d_dv")
-                            form_data["check_number"] = st.text_input("Check / LDDAP No.", key="d_chk")
-                            form_data["payee"] = st.text_input("Payee / Recipient", key="d_payee")
-                            form_data["disbursement_date"] = st.date_input("Disbursement Date", datetime.date.today(), key="d_dt").strftime("%Y-%m-%d")
-                        with col_right:
-                            form_data["amount"] = st.number_input("Gross Amount (₱)", min_value=0.0, step=100.0, key="d_amt")
-                            form_data["tax_amount"] = st.number_input("Tax Amount (₱)", min_value=0.0, step=100.0, key="d_tax")
-                            form_data["net_amount"] = form_data["amount"] - form_data["tax_amount"]
-                            form_data["status"] = st.selectbox("Disbursement Status", ["Released", "Pending Liquidation", "Liquidated", "Cancelled"], key="d_stat")
-                            form_data["encoded_status"] = st.selectbox("Encoded Status", ENCODED_OPTIONS, key="d_enc")
-                            form_data["mov_file"] = ""
-                            form_data["attachment"] = ""
-
+                        att_saved, brgy_min_saved, lgu_saved = "N/A - CV", "N/A - CV", "N/A - CV"
+                        cv_saved = save_multiple_files(cv_files)
                     else:
-                        with col_left:
-                            form_data["municipality"] = st.selectbox("Municipality", MUNICIPALITIES, key="sum_mun")
-                            form_data["total_sps"] = st.number_input("Total Sub-Projects", min_value=0, step=1, key="sum_sps")
-                            form_data["total_grant"] = st.number_input("Total Grant Allocation (₱)", min_value=0.0, step=1000.0, key="sum_grant")
-                        with col_right:
-                            form_data["total_disbursed"] = st.number_input("Total Disbursed Amount (₱)", min_value=0.0, step=1000.0, key="sum_disb")
-                            form_data["total_liquidated"] = st.number_input("Total Liquidated Amount (₱)", min_value=0.0, step=1000.0, key="sum_liq")
-                            form_data["unliquidated_balance"] = form_data["total_disbursed"] - form_data["total_liquidated"]
+                        st.markdown("##### 📁 Upload MOVs (Separate Buttons for Barangay Activities)")
+                        mov_col1, mov_col2, mov_col3 = st.columns(3)
+                        with mov_col1:
+                            st.markdown("**1. Upload Attendance**")
+                            att_file = st.file_uploader("Choose Attendance File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_att")
+                            att_saved = save_uploaded_file(att_file)
+
+                        with mov_col2:
+                            st.markdown("**2. Upload Brgy Minutes of Activity**")
+                            brgy_min_file = st.file_uploader("Choose Brgy Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_brgy_min")
+                            brgy_min_saved = save_uploaded_file(brgy_min_file)
+
+                        with mov_col3:
+                            st.markdown("**3. Upload LGU Minutes of Activity**")
+                            lgu_min_file = st.file_uploader("Choose LGU Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_lgu_min")
+                            lgu_saved = save_uploaded_file(lgu_min_file)
+                        
+                        cv_saved = ""
 
                     st.markdown("---")
                     b1, b2, b3 = st.columns([2, 2, 1])
-                    save_btn = b1.form_submit_button("💾 Save Record to Database", use_container_width=True)
-                    cancel_btn = b3.form_submit_button("❌ Cancel", use_container_width=True)
-
-                    if save_btn:
-                        valid = True
-                        if selected_view == "Sub_Project_Closeout_Tracker" and (not form_data.get("sp_id") or not form_data.get("sp_name")):
-                            st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug sulati ang Sub-Project ID ug Sub-Project Name!")
-                            valid = False
-                        elif selected_view == "Disbursement" and (not form_data.get("sp_id") or not form_data.get("dv_number")):
-                            st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug sulati ang Sub-Project ID ug DV Number!")
-                            valid = False
-
-                        if valid:
-                            table_low = selected_view.lower()
-                            col_names_str = ", ".join(form_data.keys())
-                            placeholders = ", ".join([f":{k}" for k in form_data.keys()])
-                            
+                    if b1.button("💾 Save Record to Database", use_container_width=True, key="cb_save_btn"):
+                        if not cb_barangay.strip():
+                            st.error("⚠️ **REQUIRED FIELD MISSING:** Palihug sulati ang Barangay Name!")
+                        else:
                             try:
                                 with engine.begin() as conn:
                                     conn.execute(
-                                        text(f"INSERT INTO {table_low} ({col_names_str}) VALUES ({placeholders})"),
-                                        form_data
+                                        text("""
+                                            INSERT INTO ceac_barangay (activity_name, region, province, municipality, barangay, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_brgy_minutes, mov_lgu_minutes, mov_cv_files, remarks)
+                                            VALUES (:act, :reg, :prov, :mun, :brgy, :cyc, :dt, :denc, :enc, :mst, :est, :att, :bmin, :lgu, :cv, :rem)
+                                        """),
+                                        {
+                                            "act": selected_b_act, "reg": cb_region, "prov": cb_province, "mun": cb_municipality,
+                                            "brgy": cb_barangay.strip(), "cyc": cb_cycle, "dt": cb_date, "denc": cb_date_enc,
+                                            "enc": cb_encoder, "mst": cb_mov_st, "est": cb_enc_st, "att": att_saved,
+                                            "bmin": brgy_min_saved, "lgu": lgu_saved, "cv": cv_saved, "rem": cb_remarks
+                                        }
                                     )
-
-                                    # AUTO-REFLECT DISBURSEMENT TO SUMMARY MODULE
-                                    if selected_view == "Disbursement":
-                                        d_mun = form_data.get("municipality")
-                                        d_amt = form_data.get("amount", 0.0)
-                                        
-                                        if d_mun:
-                                            sum_res = conn.execute(
-                                                text("SELECT total_disbursed, total_liquidated FROM summary WHERE lower(municipality) = lower(:m)"),
-                                                {"m": d_mun}
-                                            ).fetchone()
-
-                                            if sum_res:
-                                                curr_disb = float(sum_res[0] or 0.0) + float(d_amt)
-                                                curr_liq = float(sum_res[1] or 0.0)
-                                                new_unliq = curr_disb - curr_liq
-                                                
-                                                conn.execute(
-                                                    text("""
-                                                        UPDATE summary 
-                                                        SET total_disbursed = :td, unliquidated_balance = :ub 
-                                                        WHERE lower(municipality) = lower(:m)
-                                                    """),
-                                                    {"td": curr_disb, "ub": new_unliq, "m": d_mun}
-                                                )
-                                            else:
-                                                conn.execute(
-                                                    text("""
-                                                        INSERT INTO summary (municipality, total_sps, total_grant, total_disbursed, total_liquidated, unliquidated_balance)
-                                                        VALUES (:m, 1, :td, :td, 0.0, :td)
-                                                    """),
-                                                    {"m": d_mun, "td": float(d_amt)}
-                                                )
-
-                                st.toast(f"✅ Record saved to {selected_view} & Auto-Reflected to Summary!", icon="💾")
-                                st.success("Record saved and Summary Module updated successfully!")
+                                st.toast("✅ Barangay Activity record saved to Supabase!", icon="🎉")
+                                st.success("Barangay Activity record saved to database successfully!")
                                 st.session_state["show_add_form"] = False
                                 st.rerun()
                             except Exception as ex:
                                 st.error(f"❌ DATABASE ERROR: {ex}")
+
+                else:
+                    with st.form(f"form_add_{selected_view}"):
+                        form_data = {}
+                        col_left, col_right = st.columns(2)
+
+                        if selected_view == "Sub_Project_Closeout_Tracker":
+                            with col_left:
+                                form_data["sp_id"] = st.text_input("Sub-Project ID / Code*", key="sp_id_in")
+                                form_data["sp_name"] = st.text_input("Sub-Project Name*", key="sp_name_in")
+                                form_data["municipality"] = st.selectbox("Municipality", MUNICIPALITIES, key="sp_mun")
+                                form_data["barangay"] = st.text_input("Barangay Name", key="sp_brgy")
+                                form_data["cycle_batch"] = st.selectbox("Cycle / Batch", CYCLE_BATCHES, key="sp_cyc")
+                                form_data["functionality_audit_status"] = st.selectbox("Functionality Audit Status", CLOSEOUT_STATUSES, key="sp_fas")
+                                form_data["functionality_audit_date"] = st.date_input("Functionality Audit Date", datetime.date.today(), key="sp_fad").strftime("%Y-%m-%d")
+                                form_data["spcr_status"] = st.selectbox("SPCR Status", CLOSEOUT_STATUSES, key="sp_spcrs")
+                                form_data["spcr_date_submitted"] = st.date_input("SPCR Date Submitted", datetime.date.today(), key="sp_spcrd").strftime("%Y-%m-%d")
+                            
+                            with col_right:
+                                form_data["closing_accounts_status"] = st.selectbox("Closing Accounts Status", CLOSEOUT_STATUSES, key="sp_cas")
+                                form_data["date_account_closed"] = st.date_input("Date Account Closed", datetime.date.today(), key="sp_dac").strftime("%Y-%m-%d")
+                                form_data["booking_assets_status"] = st.selectbox("Booking Assets Status", CLOSEOUT_STATUSES, key="sp_bas")
+                                form_data["date_booking_assets"] = st.date_input("Date Booking Assets", datetime.date.today(), key="sp_dba").strftime("%Y-%m-%d")
+                                form_data["overall_closeout_status"] = st.selectbox("Overall Closeout Status", ["Ongoing Implementation", "For Closeout", "Fully Closed & Turned Over", "On Hold"], key="sp_ocs")
+                                form_data["encoded_status"] = st.selectbox("Encoded Status", ENCODED_OPTIONS, key="sp_enc")
+                                form_data["target_hhs"] = st.number_input("Target HHs", min_value=0, step=1, key="sp_thh")
+                                form_data["actual_hhs"] = st.number_input("Actual HHs", min_value=0, step=1, key="sp_ahh")
+                                form_data["male_beneficiaries"] = st.number_input("Male Beneficiaries", min_value=0, step=1, key="sp_mb")
+                                form_data["female_beneficiaries"] = st.number_input("Female Beneficiaries", min_value=0, step=1, key="sp_fb")
+                                form_data["remarks"] = st.text_area("Remarks", key="sp_rem")
+                                form_data["mov_file"] = ""
+
+                            form_data["total_beneficiaries"] = form_data["male_beneficiaries"] + form_data["female_beneficiaries"]
+                            form_data["hh_variance"] = form_data["actual_hhs"] - form_data["target_hhs"]
+
+                        elif selected_view == "Disbursement":
+                            with col_left:
+                                form_data["sp_id"] = st.text_input("Sub-Project ID / Code*", key="d_spid")
+                                form_data["sp_name"] = st.text_input("Sub-Project Name", key="d_spname")
+                                form_data["municipality"] = st.selectbox("Municipality*", MUNICIPALITIES, key="d_mun")
+                                form_data["dv_number"] = st.text_input("Disbursement Voucher (DV) No.*", key="d_dv")
+                                form_data["check_number"] = st.text_input("Check / LDDAP No.", key="d_chk")
+                                form_data["payee"] = st.text_input("Payee / Recipient", key="d_payee")
+                                form_data["disbursement_date"] = st.date_input("Disbursement Date", datetime.date.today(), key="d_dt").strftime("%Y-%m-%d")
+                            with col_right:
+                                form_data["amount"] = st.number_input("Gross Amount (₱)", min_value=0.0, step=100.0, key="d_amt")
+                                form_data["tax_amount"] = st.number_input("Tax Amount (₱)", min_value=0.0, step=100.0, key="d_tax")
+                                form_data["net_amount"] = form_data["amount"] - form_data["tax_amount"]
+                                form_data["status"] = st.selectbox("Disbursement Status", ["Released", "Pending Liquidation", "Liquidated", "Cancelled"], key="d_stat")
+                                form_data["encoded_status"] = st.selectbox("Encoded Status", ENCODED_OPTIONS, key="d_enc")
+                                form_data["mov_file"] = ""
+                                form_data["attachment"] = ""
+
+                        else:
+                            with col_left:
+                                form_data["municipality"] = st.selectbox("Municipality", MUNICIPALITIES, key="sum_mun")
+                                form_data["total_sps"] = st.number_input("Total Sub-Projects", min_value=0, step=1, key="sum_sps")
+                                form_data["total_grant"] = st.number_input("Total Grant Allocation (₱)", min_value=0.0, step=1000.0, key="sum_grant")
+                            with col_right:
+                                form_data["total_disbursed"] = st.number_input("Total Disbursed Amount (₱)", min_value=0.0, step=1000.0, key="sum_disb")
+                                form_data["total_liquidated"] = st.number_input("Total Liquidated Amount (₱)", min_value=0.0, step=1000.0, key="sum_liq")
+                                form_data["unliquidated_balance"] = form_data["total_disbursed"] - form_data["total_liquidated"]
+
+                        st.markdown("---")
+                        b1, b2, b3 = st.columns([2, 2, 1])
+                        save_btn = b1.form_submit_button("💾 Save Record to Database", use_container_width=True)
+                        cancel_btn = b3.form_submit_button("❌ Cancel", use_container_width=True)
+
+                        if save_btn:
+                            valid = True
+                            if selected_view == "Sub_Project_Closeout_Tracker" and (not form_data.get("sp_id") or not form_data.get("sp_name")):
+                                st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug sulati ang Sub-Project ID ug Sub-Project Name!")
+                                valid = False
+                            elif selected_view == "Disbursement" and (not form_data.get("sp_id") or not form_data.get("dv_number")):
+                                st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug sulati ang Sub-Project ID ug DV Number!")
+                                valid = False
+
+                            if valid:
+                                table_low = selected_view.lower()
+                                col_names_str = ", ".join(form_data.keys())
+                                placeholders = ", ".join([f":{k}" for k in form_data.keys()])
+                                
+                                try:
+                                    with engine.begin() as conn:
+                                        conn.execute(
+                                            text(f"INSERT INTO {table_low} ({col_names_str}) VALUES ({placeholders})"),
+                                            form_data
+                                        )
+
+                                        # AUTO-REFLECT DISBURSEMENT TO SUMMARY MODULE
+                                        if selected_view == "Disbursement":
+                                            d_mun = form_data.get("municipality")
+                                            d_amt = form_data.get("amount", 0.0)
+                                            
+                                            if d_mun:
+                                                sum_res = conn.execute(
+                                                    text("SELECT total_disbursed, total_liquidated FROM summary WHERE lower(municipality) = lower(:m)"),
+                                                    {"m": d_mun}
+                                                ).fetchone()
+
+                                                if sum_res:
+                                                    curr_disb = float(sum_res[0] or 0.0) + float(d_amt)
+                                                    curr_liq = float(sum_res[1] or 0.0)
+                                                    new_unliq = curr_disb - curr_liq
+                                                    
+                                                    conn.execute(
+                                                        text("""
+                                                            UPDATE summary 
+                                                            SET total_disbursed = :td, unliquidated_balance = :ub 
+                                                            WHERE lower(municipality) = lower(:m)
+                                                        """),
+                                                        {"td": curr_disb, "ub": new_unliq, "m": d_mun}
+                                                    )
+                                                else:
+                                                    conn.execute(
+                                                        text("""
+                                                            INSERT INTO summary (municipality, total_sps, total_grant, total_disbursed, total_liquidated, unliquidated_balance)
+                                                            VALUES (:m, 1, :td, :td, 0.0, :td)
+                                                        """),
+                                                        {"m": d_mun, "td": float(d_amt)}
+                                                    )
+
+                                    st.toast(f"✅ Record saved to {selected_view} & Auto-Reflected to Summary!", icon="💾")
+                                    st.success("Record saved and Summary Module updated successfully!")
+                                    st.session_state["show_add_form"] = False
+                                    st.rerun()
+                                except Exception as ex:
+                                    st.error(f"❌ DATABASE ERROR: {ex}")
+    else:
+        st.info(f"👁️ **VIEW-ONLY MODE:** Your assigned role (`{current_role}`) is restricted from adding or editing records in '{selected_view}'.")
 
     st.markdown("---")
     st.subheader(f"📊 Added Activities Masterlist ({selected_view})")
@@ -1101,13 +1136,17 @@ else:
         df_filtered = df_filtered[mask]
 
     if not df_filtered.empty:
+        # Hide sync button if user doesn't have edit rights
+        can_sync_table = (current_role in ["Superuser", "Admin"]) or has_edit_perm
+        
         edited_df = st.data_editor(
             df_filtered,
             use_container_width=True,
-            num_rows="dynamic" if st.session_state["user_role"] in ["Superuser", "Admin"] else "fixed",
+            num_rows="dynamic" if can_sync_table else "fixed",
+            disabled=not can_sync_table,
             key=f"editor_{selected_view}"
         )
-        if st.session_state["user_role"] in ["Superuser", "Admin"] and st.button("💾 Sync Table Changes to Database"):
+        if can_sync_table and st.button("💾 Sync Table Changes to Database"):
             table_low = selected_view.lower()
             try:
                 with engine.begin() as conn:
@@ -1119,7 +1158,7 @@ else:
                 st.error(f"❌ DATABASE ERROR: {ex}")
 
     else:
-        st.info(f"No records found in '{selected_view}'. Use the '➕ Add New Activity / Record' button above to create entry.")
+        st.info(f"No records found in '{selected_view}'.")
 
 st.markdown("---")
 st.markdown(
