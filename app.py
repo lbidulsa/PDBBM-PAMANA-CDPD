@@ -81,17 +81,10 @@ st.markdown("""
         color: #C53030 !important;
         border-color: #E53E3E !important;
     }
-    .mov-box {
-        background-color: #FFFFFF;
-        padding: 12px;
-        border-radius: 8px;
-        border: 1px solid #CBD5E1;
-        margin-bottom: 10px;
-    }
     .active-user-card {
         background: #FFFFFF;
         border-left: 4px solid #10B981;
-        padding: 10px 14px;
+        padding: 12px 16px;
         border-radius: 8px;
         margin-bottom: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.03);
@@ -245,6 +238,13 @@ def load_db_table(table_name):
     except Exception:
         return pd.DataFrame()
 
+# Automatic database column check for last_login
+try:
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS last_login TIMESTAMP;"))
+except Exception:
+    pass
+
 # ---------------------------------------------------------
 # 2. LOGIN PORTAL & FORGOT/RESET PASSWORD
 # ---------------------------------------------------------
@@ -288,7 +288,6 @@ def login():
                         ).fetchone()
 
                     if res:
-                        # FIX FOR "None" NAME BUG: Fallback to email if full_name is None or empty
                         display_name = res[1] if (res[1] and str(res[1]).strip() != "" and str(res[1]).lower() != "none") else res[2]
                         
                         st.session_state["logged_in"] = True
@@ -297,7 +296,7 @@ def login():
                         st.session_state["user_name"] = display_name
                         st.session_state["must_change_pass"] = bool(res[5])
 
-                        # UPDATE LAST LOGIN TIMESTAMP IN DATABASE
+                        # UPDATE LAST LOGIN TIMESTAMP
                         try:
                             with engine.begin() as conn_up:
                                 conn_up.execute(
@@ -560,25 +559,45 @@ if selected_view == "Executive Dashboard":
             st.info("No beneficiary records found.")
 
 # ---------------------------------------------------------
-# 6. USER MANAGEMENT PORTAL (WITH ACTIVE LOGGED USERS & NAME FIX)
+# 6. USER MANAGEMENT PORTAL (SUPERUSER / ADMIN LIVE USER MONITOR)
 # ---------------------------------------------------------
 elif selected_view == "User Management Portal":
-    st.subheader("👤 System User Management Portal")
+    st.subheader("👤 System User Management & Live Login Monitor")
+    
     if "gen_temp_pass" not in st.session_state:
         st.session_state["gen_temp_pass"] = generate_random_password()
     
     USER_ROLES_LIST = ["Superuser", "Admin", "AC", "TF", "MFA", "MDM"]
 
-    # --- CURRENT SESSION ACTIVE USER DISPLAY BADGE ---
-    st.markdown("##### 🟢 Currently Active Session User:")
-    st.markdown(f"""
-        <div class="active-user-card">
-            👤 <b>{st.session_state['user_name']}</b> (`{st.session_state['user_email']}`) &nbsp;|&nbsp; 
-            Role: <span class='role-badge'>{st.session_state['user_role']}</span> &nbsp;|&nbsp; 
-            Status: <span style="color:#10B981; font-weight:bold;">🟢 ACTIVE SESSION ONLINE</span>
-        </div>
-    """, unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
+    # --- SUPERUSER / ADMIN LIVE LOGGED USERS AUDIT SECTION ---
+    st.markdown("##### 🔴 Live System User Login Activity & Audit Log:")
+    
+    with engine.connect() as conn:
+        active_logs = conn.execute(text("SELECT id, full_name, email, user_role, last_login FROM user_accounts ORDER BY last_login DESC NULLS LAST")).fetchall()
+
+    if active_logs:
+        col_act1, col_act2 = st.columns([2, 1])
+        with col_act1:
+            st.markdown("###### **Recently Active Users / Login Sessions:**")
+            for u in active_logs[:5]: # Top 5 latest logins
+                u_name = u[1] if (u[1] and str(u[1]).lower() != "none") else u[2]
+                last_time = u[4].strftime("%B %d, %Y - %I:%M %p") if u[4] else "Never Logged In"
+                
+                # Check if user is current session user
+                is_curr = "🟢 CURRENT SESSION ONLINE" if u[2] == st.session_state["user_email"] else f"🕒 Last Online: {last_time}"
+                
+                st.markdown(f"""
+                    <div class="active-user-card">
+                        <b>👤 {u_name}</b> (`{u[2]}`) &nbsp;|&nbsp; 
+                        Role: <span class='role-badge'>{u[3]}</span> &nbsp;|&nbsp; 
+                        <span style="color:#0284C7; font-weight:bold;">{is_curr}</span>
+                    </div>
+                """, unsafe_allow_html=True)
+        
+        with col_act2:
+            st.info(f"📊 **Total Accounts:** `{len(active_logs)}` Users\n\n🛡️ **Superuser Privileges:** Live real-time login timestamp monitoring active.")
+
+    st.markdown("---")
     
     col_u1, col_u2 = st.columns(2)
     
@@ -599,7 +618,6 @@ elif selected_view == "User Management Portal":
                     if new_fullname and new_email:
                         try:
                             with engine.begin() as conn:
-                                # FIX FOR UNIQUE VIOLATION: Sync PostgreSQL ID sequence automatically
                                 conn.execute(text("SELECT setval(pg_get_serial_sequence('user_accounts', 'id'), COALESCE(MAX(id), 1)) FROM user_accounts;"))
                                 conn.execute(
                                     text("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (:fn, :e, :p, :r, 1)"),
@@ -675,7 +693,7 @@ elif selected_view == "User Management Portal":
                 st.info("No matching users found.")
 
     st.markdown("---")
-    st.subheader("📋 Registered Users Masterlist & Recent System Activity")
+    st.subheader("📋 Registered Users Masterlist & Login Timestamps")
     df_users = load_db_table("user_accounts")
     if not df_users.empty and "password" in df_users.columns:
         df_users = df_users.drop(columns=["password"])
@@ -795,7 +813,7 @@ else:
             if selected_view == "CEAC_Municipal":
                 col_left, col_right = st.columns(2)
                 with col_left:
-                    selected_m_act = st.selectbox("Select Municipal Activity", MUNICIPAL_ACTIVITIES, key="cm_act")
+                    selected_m_act = st.selectbox("Select Municipal Activity", MUNICIPALITIES if selected_view == "Summary" else MUNICIPAL_ACTIVITIES, key="cm_act")
                     cm_region = st.selectbox("Region", REGIONS, key="cm_reg")
                     cm_province = st.selectbox("Province", PROVINCES, key="cm_prov")
                     cm_municipality = st.selectbox("Municipality", MUNICIPALITIES, key="cm_mun")
@@ -1032,13 +1050,12 @@ else:
                                         form_data
                                     )
 
-                                    # AUTO-REFLECT DISBURSEMENT TO SUMMARY MODULE LOGIC
+                                    # AUTO-REFLECT DISBURSEMENT TO SUMMARY MODULE
                                     if selected_view == "Disbursement":
                                         d_mun = form_data.get("municipality")
                                         d_amt = form_data.get("amount", 0.0)
                                         
                                         if d_mun:
-                                            # Check if summary record exists for municipality
                                             sum_res = conn.execute(
                                                 text("SELECT total_disbursed, total_liquidated FROM summary WHERE lower(municipality) = lower(:m)"),
                                                 {"m": d_mun}
