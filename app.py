@@ -19,7 +19,7 @@ except ImportError:
     HAS_GEO_EVAL = False
 
 # ---------------------------------------------------------
-# PAGE CONFIGURATION & CUSTOM STYLING
+# PAGE CONFIGURATION & CUSTOM STYLING (WITH BUTTON ANIMATIONS)
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="PAMANA Peace & Dev Management System",
@@ -44,13 +44,21 @@ st.markdown("""
         color: #5A6A85;
         margin-bottom: 20px;
     }
+    
+    /* CARD ANIMATIONS */
     .stMetric { 
         background-color: #FFFFFF; 
         padding: 16px; 
         border-radius: 12px; 
         border: 1px solid #E2E8F0;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
+    .stMetric:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.08);
+    }
+    
     .role-badge { 
         background: linear-gradient(135deg, #1F4E78 0%, #2B6CB0 100%); 
         color: white; 
@@ -60,6 +68,8 @@ st.markdown("""
         font-weight: 600;
         display: inline-block;
     }
+    
+    /* SIDEBAR STYLING */
     section[data-testid="stSidebar"] {
         background-color: #0F2A4A !important;
         color: #FFFFFF !important;
@@ -69,18 +79,47 @@ st.markdown("""
     section[data-testid="stSidebar"] .stRadio label {
         color: #E2E8F0 !important;
     }
-    .stSidebar div.stButton > button {
-        background-color: #E2E8F0 !important;
-        color: #0F2A4A !important;
+    
+    /* GLOBAL BUTTON ANIMATIONS & STYLING */
+    div.stButton > button, 
+    div.stFormSubmitButton > button {
+        background: linear-gradient(135deg, #1F4E78 0%, #2B6CB0 100%) !important;
+        color: #FFFFFF !important;
         font-weight: bold !important;
         border-radius: 8px !important;
+        border: none !important;
+        padding: 8px 20px !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+    }
+    
+    div.stButton > button:hover, 
+    div.stFormSubmitButton > button:hover {
+        transform: translateY(-2px) scale(1.01) !important;
+        box-shadow: 0 7px 14px rgba(31, 78, 120, 0.3) !important;
+        background: linear-gradient(135deg, #2B6CB0 0%, #1F4E78 100%) !important;
+        color: #FFFFFF !important;
+    }
+    
+    div.stButton > button:active, 
+    div.stFormSubmitButton > button:active {
+        transform: translateY(1px) scale(0.99) !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+    }
+
+    /* SIDEBAR SPECIFIC BUTTON HOVER */
+    .stSidebar div.stButton > button {
+        background: #E2E8F0 !important;
+        color: #0F2A4A !important;
         border: 1px solid #CBD5E1 !important;
     }
     .stSidebar div.stButton > button:hover {
-        background-color: #FFFFFF !important;
+        background: #FFFFFF !important;
         color: #C53030 !important;
         border-color: #E53E3E !important;
+        box-shadow: 0 4px 10px rgba(229, 62, 62, 0.2) !important;
     }
+    
     .active-user-card {
         background: #FFFFFF;
         border-left: 4px solid #10B981;
@@ -88,6 +127,10 @@ st.markdown("""
         border-radius: 8px;
         margin-bottom: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+        transition: transform 0.2s ease;
+    }
+    .active-user-card:hover {
+        transform: translateX(3px);
     }
     </style>
 """, unsafe_allow_html=True)
