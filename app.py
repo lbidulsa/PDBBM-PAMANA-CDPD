@@ -19,7 +19,7 @@ except ImportError:
     HAS_GEO_EVAL = False
 
 # ---------------------------------------------------------
-# PAGE CONFIGURATION & CUSTOM STYLING (WITH GLOWING BUTTON ANIMATIONS)
+# PAGE CONFIGURATION & CUSTOM STYLING
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="PAMANA Peace & Dev Management System",
@@ -81,59 +81,38 @@ st.markdown("""
     }
     
     /* ========================================================= */
-    /* 🌟 GLOWING / MOSIGA BUTTON ANIMATIONS & STYLING 🌟 */
+    /* 🌟 UNIFIED GLOWING BUTTON ANIMATIONS (LOGOUT STYLE) 🌟 */
     /* ========================================================= */
-    @keyframes pulseGlow {
-        0% {
-            box-shadow: 0 0 5px rgba(0, 200, 255, 0.4), 0 0 10px rgba(0, 200, 255, 0.2);
-        }
-        50% {
-            box-shadow: 0 0 15px rgba(0, 200, 255, 0.8), 0 0 25px rgba(0, 200, 255, 0.6);
-        }
-        100% {
-            box-shadow: 0 0 5px rgba(0, 200, 255, 0.4), 0 0 10px rgba(0, 200, 255, 0.2);
-        }
-    }
-
     div.stButton > button, 
-    div.stFormSubmitButton > button {
-        background: linear-gradient(135deg, #1F4E78 0%, #2B6CB0 100%) !important;
-        color: #FFFFFF !important;
+    div.stFormSubmitButton > button,
+    .stSidebar div.stButton > button {
+        background-color: #E2E8F0 !important;
+        color: #0F2A4A !important;
         font-weight: bold !important;
         border-radius: 8px !important;
-        border: 1px solid #3182CE !important;
-        padding: 8px 20px !important;
-        transition: all 0.3s ease-in-out !important;
-    }
-    
-    /* HOVER STATE - MOSIGA ANG BUTTON */
-    div.stButton > button:hover, 
-    div.stFormSubmitButton > button:hover {
-        transform: translateY(-2px) scale(1.02) !important;
-        background: linear-gradient(135deg, #2B6CB0 0%, #00B4DB 100%) !important;
-        color: #FFFFFF !important;
-        animation: pulseGlow 1.5s infinite alternate !important;
-        border-color: #00E6FF !important;
-    }
-    
-    div.stButton > button:active, 
-    div.stFormSubmitButton > button:active {
-        transform: translateY(1px) scale(0.98) !important;
-        box-shadow: 0 0 5px rgba(0, 230, 255, 0.5) !important;
-    }
-
-    /* SIDEBAR SPECIFIC BUTTONS GLOW (LOGOUT / ETC) */
-    .stSidebar div.stButton > button {
-        background: #E2E8F0 !important;
-        color: #0F2A4A !important;
         border: 1px solid #CBD5E1 !important;
+        padding: 8px 20px !important;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05) !important;
     }
+    
+    /* HOVER STATE - MOSIGA ANG RED/ORANGE GLOW (RED OUTLINE & TEXT) */
+    div.stButton > button:hover, 
+    div.stFormSubmitButton > button:hover,
     .stSidebar div.stButton > button:hover {
-        background: #FFFFFF !important;
-        color: #E53E3E !important;
-        border-color: #FF4D4D !important;
-        box-shadow: 0 0 15px rgba(229, 62, 62, 0.7), 0 0 25px rgba(229, 62, 62, 0.4) !important;
-        transform: translateY(-2px) !important;
+        background-color: #FFFFFF !important;
+        color: #C53030 !important;
+        border-color: #E53E3E !important;
+        box-shadow: 0 0 15px rgba(229, 62, 62, 0.6), 0 0 25px rgba(229, 62, 62, 0.3) !important;
+        transform: translateY(-2px) scale(1.01) !important;
+    }
+    
+    /* ACTIVE/CLICK STATE */
+    div.stButton > button:active, 
+    div.stFormSubmitButton > button:active,
+    .stSidebar div.stButton > button:active {
+        transform: translateY(1px) scale(0.99) !important;
+        box-shadow: 0 0 5px rgba(229, 62, 62, 0.4) !important;
     }
     
     .active-user-card {
