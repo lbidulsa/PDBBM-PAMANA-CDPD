@@ -45,18 +45,21 @@ st.markdown("""
         margin-bottom: 20px;
     }
     
-    /* CARD HOVER ANIMATIONS */
+    /* ========================================================= */
+    /* 🌟 EXECUTIVE DASHBOARD METRIC CARDS GLOW (LOGOUT STYLE) 🌟 */
+    /* ========================================================= */
     .stMetric { 
-        background-color: #FFFFFF; 
-        padding: 16px; 
-        border-radius: 12px; 
-        border: 1px solid #E2E8F0;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        background-color: #FFFFFF !important; 
+        padding: 16px !important; 
+        border-radius: 12px !important; 
+        border: 1px solid #CBD5E1 !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
     }
     .stMetric:hover {
-        transform: translateY(-4px);
-        box-shadow: 0 10px 20px rgba(31, 78, 120, 0.15);
+        transform: translateY(-4px) scale(1.02) !important;
+        border-color: #E53E3E !important;
+        box-shadow: 0 0 15px rgba(229, 62, 62, 0.6), 0 0 25px rgba(229, 62, 62, 0.3) !important;
     }
     
     .role-badge { 
