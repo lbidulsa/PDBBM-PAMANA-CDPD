@@ -19,7 +19,7 @@ except ImportError:
     HAS_GEO_EVAL = False
 
 # ---------------------------------------------------------
-# PAGE CONFIGURATION & CUSTOM STYLING (WITH BUTTON ANIMATIONS)
+# PAGE CONFIGURATION & CUSTOM STYLING (WITH GLOWING BUTTON ANIMATIONS)
 # ---------------------------------------------------------
 st.set_page_config(
     page_title="PAMANA Peace & Dev Management System",
@@ -45,18 +45,18 @@ st.markdown("""
         margin-bottom: 20px;
     }
     
-    /* CARD ANIMATIONS */
+    /* CARD HOVER ANIMATIONS */
     .stMetric { 
         background-color: #FFFFFF; 
         padding: 16px; 
         border-radius: 12px; 
         border: 1px solid #E2E8F0;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
     }
     .stMetric:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 8px 15px rgba(0, 0, 0, 0.08);
+        transform: translateY(-4px);
+        box-shadow: 0 10px 20px rgba(31, 78, 120, 0.15);
     }
     
     .role-badge { 
@@ -80,34 +80,49 @@ st.markdown("""
         color: #E2E8F0 !important;
     }
     
-    /* GLOBAL BUTTON ANIMATIONS & STYLING */
+    /* ========================================================= */
+    /* 🌟 GLOWING / MOSIGA BUTTON ANIMATIONS & STYLING 🌟 */
+    /* ========================================================= */
+    @keyframes pulseGlow {
+        0% {
+            box-shadow: 0 0 5px rgba(0, 200, 255, 0.4), 0 0 10px rgba(0, 200, 255, 0.2);
+        }
+        50% {
+            box-shadow: 0 0 15px rgba(0, 200, 255, 0.8), 0 0 25px rgba(0, 200, 255, 0.6);
+        }
+        100% {
+            box-shadow: 0 0 5px rgba(0, 200, 255, 0.4), 0 0 10px rgba(0, 200, 255, 0.2);
+        }
+    }
+
     div.stButton > button, 
     div.stFormSubmitButton > button {
         background: linear-gradient(135deg, #1F4E78 0%, #2B6CB0 100%) !important;
         color: #FFFFFF !important;
         font-weight: bold !important;
         border-radius: 8px !important;
-        border: none !important;
+        border: 1px solid #3182CE !important;
         padding: 8px 20px !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+        transition: all 0.3s ease-in-out !important;
     }
     
+    /* HOVER STATE - MOSIGA ANG BUTTON */
     div.stButton > button:hover, 
     div.stFormSubmitButton > button:hover {
-        transform: translateY(-2px) scale(1.01) !important;
-        box-shadow: 0 7px 14px rgba(31, 78, 120, 0.3) !important;
-        background: linear-gradient(135deg, #2B6CB0 0%, #1F4E78 100%) !important;
+        transform: translateY(-2px) scale(1.02) !important;
+        background: linear-gradient(135deg, #2B6CB0 0%, #00B4DB 100%) !important;
         color: #FFFFFF !important;
+        animation: pulseGlow 1.5s infinite alternate !important;
+        border-color: #00E6FF !important;
     }
     
     div.stButton > button:active, 
     div.stFormSubmitButton > button:active {
-        transform: translateY(1px) scale(0.99) !important;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        transform: translateY(1px) scale(0.98) !important;
+        box-shadow: 0 0 5px rgba(0, 230, 255, 0.5) !important;
     }
 
-    /* SIDEBAR SPECIFIC BUTTON HOVER */
+    /* SIDEBAR SPECIFIC BUTTONS GLOW (LOGOUT / ETC) */
     .stSidebar div.stButton > button {
         background: #E2E8F0 !important;
         color: #0F2A4A !important;
@@ -115,9 +130,10 @@ st.markdown("""
     }
     .stSidebar div.stButton > button:hover {
         background: #FFFFFF !important;
-        color: #C53030 !important;
-        border-color: #E53E3E !important;
-        box-shadow: 0 4px 10px rgba(229, 62, 62, 0.2) !important;
+        color: #E53E3E !important;
+        border-color: #FF4D4D !important;
+        box-shadow: 0 0 15px rgba(229, 62, 62, 0.7), 0 0 25px rgba(229, 62, 62, 0.4) !important;
+        transform: translateY(-2px) !important;
     }
     
     .active-user-card {
@@ -127,10 +143,11 @@ st.markdown("""
         border-radius: 8px;
         margin-bottom: 8px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.03);
-        transition: transform 0.2s ease;
+        transition: all 0.3s ease;
     }
     .active-user-card:hover {
-        transform: translateX(3px);
+        transform: translateX(4px);
+        box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
     }
     </style>
 """, unsafe_allow_html=True)
