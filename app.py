@@ -489,7 +489,7 @@ BARANGAY_ACTIVITIES = [
     "BAR", "OM", "2nd_BA", "Grievance_Intake", "GRS_Installation_Checklist", "CV", "ERS"
 ]
 
-# 🌟 ALL_TABS INCLUDES THE SPI_MASTERLIST MODULE
+# 🌟 RENAMED MODULE IN ALL_TABS: SP_Profile
 ALL_TABS = [
     "Executive Dashboard", "User Management Portal", "CEAC_Municipal", "CEAC_Barangay",
     "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "SP_Profile", "Summary", "Finance"
@@ -505,9 +505,9 @@ else:
 def can_edit_module(role, module):
     if role in ["Superuser", "Admin"]:
         return True
-    elif role == "AC" and module in ["CEAC_Municipal", "CEAC_Barangay", "Sub_Project_Closeout_Tracker", "SPI_Masterlist"]:
+    elif role == "AC" and module in ["CEAC_Municipal", "CEAC_Barangay", "Sub_Project_Closeout_Tracker", "SP_Profile"]:
         return True
-    elif role == "TF" and module in ["Geotagged_Photos", "Sub_Project_Closeout_Tracker", "SPI_Masterlist"]:
+    elif role == "TF" and module in ["Geotagged_Photos", "Sub_Project_Closeout_Tracker", "SP_Profile"]:
         return True
     elif role == "MFA" and module == "Disbursement":
         return True
@@ -968,19 +968,19 @@ elif selected_view == "Finance":
     )
 
 # ---------------------------------------------------------
-# 9. SPI MASTERLIST MODULE (EXACT 74 HIGHLIGHTED COLUMNS)
+# 9. SP PROFILE MODULE (RENAMED FROM SPI_MASTERLIST, CONNECTED TO spi_masterlist TABLE)
 # ---------------------------------------------------------
-elif selected_view == "SPI_Masterlist":
-    st.subheader("📊 SPI Masterlist Management Module")
+elif selected_view == "SP_Profile":
+    st.subheader("📊 SP Profile Management Module")
 
-    has_edit_perm = can_edit_module(current_role, "SPI_Masterlist")
+    has_edit_perm = can_edit_module(current_role, "SP_Profile")
 
     if has_edit_perm:
-        if st.button("➕ Add New SPI Masterlist Record", use_container_width=True):
+        if st.button("➕ Add New SP Profile Record", use_container_width=True):
             st.session_state["show_add_spi"] = not st.session_state.get("show_add_spi", False)
 
         if st.session_state.get("show_add_spi", True):
-            with st.expander("📝 Comprehensive Entry Form: SPI Masterlist (All Highlighted Fields Included)", expanded=True):
+            with st.expander("📝 Comprehensive Entry Form: SP Profile (All 74 Highlighted Fields Included)", expanded=True):
                 with st.form("form_add_spi_masterlist"):
                     spi_data = {}
 
@@ -1096,7 +1096,7 @@ elif selected_view == "SPI_Masterlist":
                         spi_data["created_by"] = st.session_state["user_name"]
 
                     st.markdown("---")
-                    save_spi_btn = st.form_submit_button("💾 Save Full SPI Record to Database", use_container_width=True)
+                    save_spi_btn = st.form_submit_button("💾 Save Full SP Profile Record to Database", use_container_width=True)
 
                     if save_spi_btn:
                         if not spi_data.get("spid") or not spi_data.get("sp_title"):
@@ -1110,20 +1110,20 @@ elif selected_view == "SPI_Masterlist":
                                         text(f"INSERT INTO spi_masterlist ({col_names_str}) VALUES ({placeholders})"),
                                         spi_data,
                                     )
-                                st.toast("✅ Full SPI Masterlist record saved to Supabase!", icon="🎉")
+                                st.toast("✅ Full SP Profile record saved to Supabase!", icon="🎉")
                                 st.success("Record saved successfully!")
                                 st.session_state["show_add_spi"] = False
                                 st.rerun()
                             except Exception as ex:
                                 st.error(f"❌ DATABASE ERROR: {ex}")
     else:
-        st.info(f"👁️ **VIEW-ONLY MODE:** Your assigned role (`{current_role}`) is restricted from adding or editing records in SPI Masterlist.")
+        st.info(f"👁️ **VIEW-ONLY MODE:** Your assigned role (`{current_role}`) is restricted from adding or editing records in SP Profile.")
 
     st.markdown("---")
-    st.subheader("📊 SPI Masterlist Master Database Table")
+    st.subheader("📊 SP Profile Master Database Table")
 
     df_spi = load_db_table("spi_masterlist")
-    search_spi = st.text_input("🔍 Search SPI Masterlist Records:", "", key="spi_search_kw")
+    search_spi = st.text_input("🔍 Search SP Profile Records:", "", key="spi_search_kw")
     df_spi_filtered = df_spi.copy()
 
     if search_spi and not df_spi_filtered.empty:
@@ -1138,14 +1138,14 @@ elif selected_view == "SPI_Masterlist":
             use_container_width=True,
             num_rows="dynamic" if can_sync_spi else "fixed",
             disabled=not can_sync_spi,
-            key="editor_spi_masterlist",
+            key="editor_sp_profile",
         )
 
-        if can_sync_spi and st.button("💾 Sync SPI Table Changes to Database", key="sync_btn_spi"):
+        if can_sync_spi and st.button("💾 Sync Table Changes to Database", key="sync_btn_spi"):
             try:
                 with engine.begin() as conn:
                     edited_spi_df.to_sql("spi_masterlist", conn, if_exists="replace", index=False)
-                st.toast("✅ SPI Table synchronized to Supabase!", icon="🎉")
+                st.toast("✅ SP Profile Table synchronized to Supabase!", icon="🎉")
                 st.success("Database synchronized successfully!")
                 st.rerun()
             except Exception as ex:
@@ -1154,17 +1154,17 @@ elif selected_view == "SPI_Masterlist":
         # 👑 SUPERUSER ACTION PANEL (EDIT / DELETE ROW)
         if current_role == "Superuser" and "id" in df_spi_filtered.columns:
             st.markdown("---")
-            with st.expander("⚙️ Superuser Record Action Panel (Edit / Delete Row in SPI Masterlist)"):
+            with st.expander("⚙️ Superuser Record Action Panel (Edit / Delete Row in SP Profile)"):
                 row_ids = df_spi_filtered["id"].tolist()
-                selected_row_id = st.selectbox("Select Row ID to Edit or Delete:", row_ids, key="sel_id_spi_masterlist")
+                selected_row_id = st.selectbox("Select Row ID to Edit or Delete:", row_ids, key="sel_id_sp_profile")
 
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
-                    if st.button("✏️ Edit Selected Record", use_container_width=True, key="btn_edit_spi_masterlist"):
-                        st.session_state["editing_id_spi_masterlist"] = selected_row_id
+                    if st.button("✏️ Edit Selected Record", use_container_width=True, key="btn_edit_sp_profile"):
+                        st.session_state["editing_id_sp_profile"] = selected_row_id
 
                 with col_btn2:
-                    if st.button("🗑️ Delete Selected Record", use_container_width=True, key="btn_del_spi_masterlist"):
+                    if st.button("🗑️ Delete Selected Record", use_container_width=True, key="btn_del_sp_profile"):
                         try:
                             with engine.begin() as conn:
                                 conn.execute(text("DELETE FROM spi_masterlist WHERE id = :id"), {"id": selected_row_id})
@@ -1174,7 +1174,7 @@ elif selected_view == "SPI_Masterlist":
                         except Exception as ex:
                             st.error(f"❌ DATABASE ERROR: {ex}")
 
-                if st.session_state.get("editing_id_spi_masterlist") == selected_row_id:
+                if st.session_state.get("editing_id_sp_profile") == selected_row_id:
                     st.markdown(f"##### 📝 Editing Record ID: `{selected_row_id}`")
                     row_data = df_spi_filtered[df_spi_filtered["id"] == selected_row_id].iloc[0].to_dict()
 
@@ -1202,12 +1202,12 @@ elif selected_view == "SPI_Masterlist":
 
                                 st.toast("✅ Record updated successfully!", icon="💾")
                                 st.success(f"Record ID {selected_row_id} updated!")
-                                st.session_state["editing_id_spi_masterlist"] = None
+                                st.session_state["editing_id_sp_profile"] = None
                                 st.rerun()
                             except Exception as ex:
                                 st.error(f"❌ DATABASE ERROR: {ex}")
     else:
-        st.info("No records found in SPI Masterlist.")
+        st.info("No records found in SP Profile.")
 
 # ---------------------------------------------------------
 # 10. CEAC MUNICIPAL, BARANGAY, DISBURSEMENT & CLOSEOUT TRACKER MODULES
