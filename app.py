@@ -492,7 +492,7 @@ BARANGAY_ACTIVITIES = [
 # 🌟 ALL_TABS INCLUDES THE SPI_MASTERLIST MODULE
 ALL_TABS = [
     "Executive Dashboard", "User Management Portal", "CEAC_Municipal", "CEAC_Barangay",
-    "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "SPI_Masterlist", "Summary", "Finance"
+    "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "SPI_Profile", "Summary", "Finance"
 ]
 
 current_role = st.session_state.get("user_role", "AC")
