@@ -13,7 +13,7 @@ import plotly.express as px
 from sqlalchemy import create_engine, text
 import streamlit as st
 
-# Check for timezone support (zoneinfo or pytz)
+# Timezone Support
 try:
     from zoneinfo import ZoneInfo
     PH_TZ = ZoneInfo("Asia/Manila")
@@ -792,7 +792,7 @@ elif selected_view == "User Management Portal":
     st.dataframe(df_users, use_container_width=True, hide_index=True)
 
 # ---------------------------------------------------------
-# 7. GEOTAGGED PHOTOS MODULE
+# 7. GEOTAGGED PHOTOS MODULE (WITH INJECTED PHOTO VIEWER / GALLERY)
 # ---------------------------------------------------------
 elif selected_view == "Geotagged_Photos":
     st.subheader("📸 Geotagged Photos & Progress File Uploads")
@@ -819,7 +819,6 @@ elif selected_view == "Geotagged_Photos":
             with st.form("photo_upload_form", clear_on_submit=True):
                 col_u1, col_u2 = st.columns(2)
                 with col_u1:
-                    # 💡 NOTE ADDED FOR SP ID FIELD
                     sp_id = st.text_input("Sub-Project ID / Code (Put 'N/A' if no SP ID)*")
                     sp_name = st.text_input("Sub-Project Name")
                     stage = st.selectbox("Stage", ["BEFORE Construction", "DURING Construction", "AFTER / Completed"])
@@ -860,18 +859,58 @@ elif selected_view == "Geotagged_Photos":
         st.info(f"👁️ **VIEW-ONLY MODE:** Your assigned role (`{current_role}`) is restricted from uploading new photos in this module.")
 
     st.markdown("---")
-    st.subheader("📋 Listed Geotagged Photos Records")
+    
+    # 🌟 INJECTED PHOTO GALLERY & VIEWER FOR ALL USERS
+    st.subheader("🖼️ Geotagged Photos Gallery & Interactive Viewer")
     df_photos = load_db_table("geotagged_photos")
-    st.dataframe(df_photos, use_container_width=True)
 
-    # --- SUPERUSER EDIT / DELETE FOR GEOTAGGED PHOTOS ---
-    if current_role == "Superuser" and not df_photos.empty and "id" in df_photos.columns:
-        with st.expander("⚙️ Superuser Action Panel (Edit / Delete Photo Record)"):
-            photo_ids = df_photos["id"].tolist()
-            sel_pid = st.selectbox("Select Photo Record ID to Manage:", photo_ids, key="sel_pid_m")
-            act_col1, act_col2 = st.columns(2)
+    if not df_photos.empty:
+        # Search & Filter
+        sp_filter = st.text_input("🔍 Search Photo by Sub-Project ID, Name, or Stage:", "", key="photo_search_input")
+        df_p_filtered = df_photos.copy()
+        
+        if sp_filter:
+            mask = df_p_filtered.astype(str).apply(lambda row: row.str.contains(sp_filter, case=False).any(), axis=1)
+            df_p_filtered = df_p_filtered[mask]
+
+        if not df_p_filtered.empty:
+            st.markdown("##### 📷 Uploaded Photos Cards Grid:")
+            cols = st.columns(3) # 3-column photo grid layout
             
-            with act_col1:
+            for idx, (_, row) in enumerate(df_p_filtered.iterrows()):
+                col_target = cols[idx % 3]
+                p_file_name = row.get("photo_file", "")
+                p_path = os.path.join("uploaded_photos", str(p_file_name)) if p_file_name else ""
+
+                with col_target:
+                    st.markdown(f"**📌 {row.get('sp_name', 'Sub-Project')}**")
+                    st.caption(f"🆔 **SP ID:** `{row.get('sp_id', 'N/A')}` | 🏗️ **Stage:** `{row.get('stage', 'N/A')}`")
+
+                    if p_path and os.path.exists(p_path):
+                        try:
+                            img_obj = Image.open(p_path)
+                            st.image(img_obj, use_container_width=True, caption=f"📸 File: {p_file_name}")
+                        except Exception:
+                            st.warning(f"⚠️ Photo file '{p_file_name}' cannot be opened.")
+                    else:
+                        st.info(f"📁 File Name: `{p_file_name}`\n\n*(Local preview file not found in uploaded_photos directory)*")
+
+                    st.markdown(f"📍 **GPS:** `{row.get('latitude', '')}, {row.get('longitude', '')}`")
+                    st.caption(f"👤 Encoder: {row.get('encoder', 'N/A')} | 📅 Date: {row.get('date_uploaded', 'N/A')}")
+                    st.markdown("---")
+        else:
+            st.info("No matching geotagged photo records found.")
+
+        st.markdown("---")
+        st.subheader("📋 Raw Geotagged Photos Database Masterlist")
+        st.dataframe(df_photos, use_container_width=True)
+
+        # 👑 SUPERUSER ACTION PANEL FOR PHOTOS
+        if current_role == "Superuser" and "id" in df_photos.columns:
+            with st.expander("⚙️ Superuser Action Panel (Delete Photo Record)"):
+                photo_ids = df_photos["id"].tolist()
+                sel_pid = st.selectbox("Select Photo Record ID to Delete:", photo_ids, key="sel_pid_m")
+                
                 if st.button("🗑️ Delete Selected Photo Record", use_container_width=True, key="del_photo_btn"):
                     try:
                         with engine.begin() as conn:
@@ -881,6 +920,8 @@ elif selected_view == "Geotagged_Photos":
                         st.rerun()
                     except Exception as ex:
                         st.error(f"❌ ERROR: {ex}")
+    else:
+        st.info("No geotagged photos uploaded yet.")
 
 # ---------------------------------------------------------
 # 8. FINANCE MODULE
@@ -1080,7 +1121,6 @@ else:
 
                         if selected_view == "Sub_Project_Closeout_Tracker":
                             with col_left:
-                                # 💡 NOTE ADDED FOR SP ID FIELD
                                 form_data["sp_id"] = st.text_input("Sub-Project ID / Code (Put 'N/A' if no SP ID)*", key="sp_id_in")
                                 form_data["sp_name"] = st.text_input("Sub-Project Name*", key="sp_name_in")
                                 form_data["municipality"] = st.selectbox("Municipality", MUNICIPALITIES, key="sp_mun")
@@ -1110,7 +1150,6 @@ else:
 
                         elif selected_view == "Disbursement":
                             with col_left:
-                                # 💡 NOTE ADDED FOR SP ID FIELD
                                 form_data["sp_id"] = st.text_input("Sub-Project ID / Code (Put 'N/A' if no SP ID)*", key="d_spid")
                                 form_data["sp_name"] = st.text_input("Sub-Project Name", key="d_spname")
                                 form_data["municipality"] = st.selectbox("Municipality*", MUNICIPALITIES, key="d_mun")
@@ -1235,7 +1274,7 @@ else:
             except Exception as ex:
                 st.error(f"❌ DATABASE ERROR: {ex}")
 
-        # 👑 SUPERUSER DEDICATED EDIT AND DELETE ACTION BUTTONS
+        # 👑 SUPERUSER ACTION PANEL
         if current_role == "Superuser" and "id" in df_filtered.columns:
             st.markdown("---")
             with st.expander(f"⚙️ Superuser Record Action Panel (Edit / Delete Row in {selected_view})"):
@@ -1260,7 +1299,6 @@ else:
                         except Exception as ex:
                             st.error(f"❌ DATABASE ERROR: {ex}")
 
-                # Inline Edit Form if triggered by Superuser
                 if st.session_state.get(f"editing_id_{selected_view}") == selected_row_id:
                     st.markdown(f"##### 📝 Editing Record ID: `{selected_row_id}`")
                     row_data = df_filtered[df_filtered["id"] == selected_row_id].iloc[0].to_dict()
