@@ -489,7 +489,6 @@ BARANGAY_ACTIVITIES = [
     "BAR", "OM", "2nd_BA", "Grievance_Intake", "GRS_Installation_Checklist", "CV", "ERS"
 ]
 
-# 🌟 RENAMED MODULE IN ALL_TABS: SP_Profile
 ALL_TABS = [
     "Executive Dashboard", "User Management Portal", "CEAC_Municipal", "CEAC_Barangay",
     "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "SP_Profile", "Summary", "Finance"
@@ -968,7 +967,7 @@ elif selected_view == "Finance":
     )
 
 # ---------------------------------------------------------
-# 9. SP PROFILE MODULE (RENAMED FROM SPI_MASTERLIST, CONNECTED TO spi_masterlist TABLE)
+# 9. SP PROFILE MODULE (OPTIMIZED FORM - REDUNDANCIES REMOVED)
 # ---------------------------------------------------------
 elif selected_view == "SP_Profile":
     st.subheader("📊 SP Profile Management Module")
@@ -980,7 +979,7 @@ elif selected_view == "SP_Profile":
             st.session_state["show_add_spi"] = not st.session_state.get("show_add_spi", False)
 
         if st.session_state.get("show_add_spi", True):
-            with st.expander("📝 Comprehensive Entry Form: SP Profile (All 74 Highlighted Fields Included)", expanded=True):
+            with st.expander("📝 Clean Entry Form: SP Profile (Optimized & Non-Redundant Fields)", expanded=True):
                 with st.form("form_add_spi_masterlist"):
                     spi_data = {}
 
@@ -1021,7 +1020,7 @@ elif selected_view == "SP_Profile":
                         spi_data["refunded"] = st.number_input("Refunded Amount (₱)", min_value=0.0, key="spi_ref")
 
                     st.markdown("---")
-                    st.markdown("#### 3. Dates, Physical Accomplishment & Status")
+                    st.markdown("#### 3. Physical Accomplishment & Timeline Status")
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         spi_data["date_started"] = st.date_input("Date Started", datetime.date.today(), key="spi_ds").strftime("%Y-%m-%d")
@@ -1034,22 +1033,16 @@ elif selected_view == "SP_Profile":
                         spi_data["physical_status_original_pow"] = st.text_input("Physical Status (Original POW)", key="spi_ps_pow")
                         spi_data["physical_accomplishment_percentage_as_per_vo"] = st.number_input("Physical Accomplishment % (VO)", min_value=0.0, max_value=100.0, key="spi_pa_vo")
                         spi_data["date_of_completion_as_per_vo"] = st.date_input("Completion Date (per VO)", datetime.date.today(), key="spi_dc_vo").strftime("%Y-%m-%d")
+                    with c3:
                         spi_data["final_physical_status"] = st.selectbox("Final Physical Status", ["Completed", "On-going", "For Implementation", "Cancelled"], key="spi_fps")
                         spi_data["final_physical_accomplishment"] = st.number_input("Final Physical Accomplishment %", min_value=0.0, max_value=100.0, key="spi_fpa")
-                    with c3:
-                        # 🌟 CHECKBOXES FOR YES/NO FIELDS
                         spi_data["has_variation_order"] = "Yes" if st.checkbox("Has Variation Order?", key="spi_c_vo") else "No"
-                        spi_data["has_booked"] = "Yes" if st.checkbox("Has Booked Asset?", key="spi_c_bk") else "No"
-                        spi_data["booked_date"] = st.date_input("Booked Date", datetime.date.today(), key="spi_bd").strftime("%Y-%m-%d")
-                        spi_data["closed_account"] = "Yes" if st.checkbox("Closed Bank Account?", key="spi_c_ca") else "No"
 
                     st.markdown("---")
-                    st.markdown("#### 4. Complete Beneficiary Breakdown")
+                    st.markdown("#### 4. Specialized Program Beneficiary Breakdown (IP, Pantawid & SLP)")
                     c1, c2, c3 = st.columns(3)
                     with c1:
-                        spi_data["no_of_household_beneficiaries_target"] = st.number_input("Target HH Beneficiaries", min_value=0, step=1, key="spi_thh")
                         spi_data["no_of_ip_household_bene_target"] = st.number_input("Target IP HH Beneficiaries", min_value=0, step=1, key="spi_tip_hh")
-                        spi_data["no_of_household_beneficiaries_actual"] = st.number_input("Actual HH Beneficiaries", min_value=0, step=1, key="spi_ahh")
                         spi_data["no_of_families_beneficiaries_target"] = st.number_input("Target Family Beneficiaries", min_value=0, step=1, key="spi_tfam")
                         spi_data["no_of_families_beneficiaries_actual"] = st.number_input("Actual Family Beneficiaries", min_value=0, step=1, key="spi_afam")
                     with c2:
@@ -1060,14 +1053,11 @@ elif selected_view == "SP_Profile":
                     with c3:
                         spi_data["no_actual_ip_households"] = st.number_input("Actual IP HHs", min_value=0, step=1, key="spi_ip_hh")
                         spi_data["no_actual_ip_families"] = st.number_input("Actual IP Families", min_value=0, step=1, key="spi_ip_fam")
-                        spi_data["no_actual_male"] = st.number_input("Actual Male Beneficiaries", min_value=0, step=1, key="spi_mb")
-                        spi_data["no_actual_female"] = st.number_input("Actual Female Beneficiaries", min_value=0, step=1, key="spi_fb")
 
                     st.markdown("---")
-                    st.markdown("#### 5. Environmental & Social Safeguards and Land Acquisition (All Checkboxes)")
+                    st.markdown("#### 5. Safeguards & Land Acquisition Documents")
                     c1, c2, c3 = st.columns(3)
                     with c1:
-                        spi_data["has_scanned_spcr"] = "Yes" if st.checkbox("Has Scanned SPCR?", key="spi_c_spcr") else "No"
                         spi_data["has_turnover_certificate"] = "Yes" if st.checkbox("Has Turnover Certificate?", key="spi_c_toc") else "No"
                         spi_data["with_ip_presence"] = "Yes" if st.checkbox("With IP Presence?", key="spi_c_ipp") else "No"
                         spi_data["with_esmp"] = "Yes" if st.checkbox("With ESMP?", key="spi_c_esmp") else "No"
@@ -1096,7 +1086,7 @@ elif selected_view == "SP_Profile":
                         spi_data["created_by"] = st.session_state["user_name"]
 
                     st.markdown("---")
-                    save_spi_btn = st.form_submit_button("💾 Save Full SP Profile Record to Database", use_container_width=True)
+                    save_spi_btn = st.form_submit_button("💾 Save SP Profile Record to Database", use_container_width=True)
 
                     if save_spi_btn:
                         if not spi_data.get("spid") or not spi_data.get("sp_title"):
@@ -1110,7 +1100,7 @@ elif selected_view == "SP_Profile":
                                         text(f"INSERT INTO spi_masterlist ({col_names_str}) VALUES ({placeholders})"),
                                         spi_data,
                                     )
-                                st.toast("✅ Full SP Profile record saved to Supabase!", icon="🎉")
+                                st.toast("✅ SP Profile record saved to Supabase!", icon="🎉")
                                 st.success("Record saved successfully!")
                                 st.session_state["show_add_spi"] = False
                                 st.rerun()
