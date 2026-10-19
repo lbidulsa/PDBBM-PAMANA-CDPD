@@ -1,4 +1,5 @@
 import datetime
+import io
 import os
 import random
 import secrets
@@ -491,7 +492,8 @@ BARANGAY_ACTIVITIES = [
 
 ALL_TABS = [
     "Executive Dashboard", "User Management Portal", "CEAC_Municipal", "CEAC_Barangay",
-    "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "SP_Profile", "Summary", "Finance"
+    "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "SP_Profile", "Summary", "Finance",
+    "Data Extraction & Export"
 ]
 
 current_role = st.session_state.get("user_role", "AC")
@@ -1200,7 +1202,99 @@ elif selected_view == "SP_Profile":
         st.info("No records found in SP Profile.")
 
 # ---------------------------------------------------------
-# 10. CEAC MUNICIPAL, BARANGAY, DISBURSEMENT & CLOSEOUT TRACKER MODULES
+# 10. DATA EXTRACTION & EXPORT MODULE (NEW MODULE)
+# ---------------------------------------------------------
+elif selected_view == "Data Extraction & Export":
+    st.subheader("📥 Data Extraction & Export Center")
+    st.caption("Pili ug Module ug Date Range para maka-extract ug Excel o CSV Report.")
+
+    exportable_modules = {
+        "CEAC_Municipal": {"table": "ceac_municipal", "date_col": "activity_date"},
+        "CEAC_Barangay": {"table": "ceac_barangay", "date_col": "activity_date"},
+        "Geotagged_Photos": {"table": "geotagged_photos", "date_col": "date_uploaded"},
+        "Disbursement": {"table": "disbursement", "date_col": "disbursement_date"},
+        "Sub_Project_Closeout_Tracker": {"table": "sub_project_closeout_tracker", "date_col": "spcr_date_submitted"},
+        "SP_Profile": {"table": "spi_masterlist", "date_col": "created_date"},
+        "Summary": {"table": "summary", "date_col": None},
+    }
+
+    c_ex1, c_ex2 = st.columns([1, 2])
+
+    with c_ex1:
+        st.markdown("##### 📌 Extraction Settings")
+        selected_mod = st.selectbox("Select Module to Extract Data From:", list(exportable_modules.keys()))
+        mod_info = exportable_modules[selected_mod]
+        
+        date_col_name = mod_info["date_col"]
+
+        st.markdown("---")
+        st.markdown("##### 📅 Date Range Filtering")
+        
+        default_start = datetime.date(2026, 1, 1)
+        default_end = datetime.date.today()
+
+        if date_col_name:
+            col_d1, col_d2 = st.columns(2)
+            with col_d1:
+                start_date = st.date_input("Start Date:", value=default_start)
+            with col_d2:
+                end_date = st.date_input("End Date:", value=default_end)
+        else:
+            st.info("ℹ️ Note: This module has no specific date column. Full dataset will be loaded.")
+            start_date, end_date = None, None
+
+    with c_ex2:
+        st.markdown(f"##### 📊 Extracted Preview: `{selected_mod}`")
+        df_mod = load_db_table(mod_info["table"])
+
+        if not df_mod.empty:
+            # Apply Date Filter if applicable
+            if date_col_name and date_col_name in df_mod.columns and start_date and end_date:
+                try:
+                    df_mod[date_col_name] = pd.to_datetime(df_mod[date_col_name], errors="coerce").dt.date
+                    df_filtered_export = df_mod[(df_mod[date_col_name] >= start_date) & (df_mod[date_col_name] <= end_date)]
+                except Exception:
+                    df_filtered_export = df_mod.copy()
+            else:
+                df_filtered_export = df_mod.copy()
+
+            st.write(f"Total Records Found: **{len(df_filtered_export)}**")
+            st.dataframe(df_filtered_export, use_container_width=True, height=350)
+
+            st.markdown("---")
+            st.markdown("##### 💾 Download Report Options")
+            btn_col1, btn_col2 = st.columns(2)
+
+            # Excel Download Generator
+            excel_buffer = io.BytesIO()
+            with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+                df_filtered_export.to_excel(writer, index=False, sheet_name=selected_mod[:30])
+            excel_data = excel_buffer.getvalue()
+
+            with btn_col1:
+                st.download_button(
+                    label="📊 Download Excel (.xlsx)",
+                    data=excel_data,
+                    file_name=f"{selected_mod}_Report_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                )
+
+            # CSV Download Generator
+            csv_data = df_filtered_export.to_csv(index=False).encode("utf-8")
+            with btn_col2:
+                st.download_button(
+                    label="📄 Download CSV (.csv)",
+                    data=csv_data,
+                    file_name=f"{selected_mod}_Report_{datetime.date.today().strftime('%Y%m%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                )
+        else:
+            st.info("No records found in this database module.")
+
+# ---------------------------------------------------------
+# 11. CEAC MUNICIPAL, BARANGAY, DISBURSEMENT & CLOSEOUT TRACKER MODULES
 # ---------------------------------------------------------
 else:
     st.subheader(f"📋 Data Management & Encoding: {selected_view}")
