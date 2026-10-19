@@ -945,18 +945,18 @@ elif selected_view == "Geotagged_Photos":
         st.info("No geotagged photos uploaded yet.")
 
 # ---------------------------------------------------------
-# 8. FINANCE MODULE (FIXED EMBED & DIRECT ACCESS)
+# 8. FINANCE MODULE (EXCLUSIVE MONITORING EVALUATION REPORT DISPLAY)
 # ---------------------------------------------------------
 elif selected_view == "Finance":
     st.subheader("💰 Finance - Monitoring Evaluation Report")
     st.caption("Live Synchronization Viewer • Official Executive Finance Tracking")
 
-    sheet_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/edit?usp=sharing"
-    embed_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/htmlembed?widget=true&headers=false"
+    sheet_url = "https://docs.google.com/spreadsheets/d/1d_QZrY3tF6wajFQiOx5yTtv55_GyrIYW/edit?gid=1476863389#gid=1476863389"
+    embed_url = "https://docs.google.com/spreadsheets/d/e/2PACX-1vT51CpWr5YaWUkDCfJYmUCAFduSjlC8Nlbxqb2DGceLH2CuaQ9EIOva6HRVj5ikVQ/pubhtml?gid=1476863389&single=true&widget=false&headers=false"
 
     c_f1, c_f2 = st.columns([3, 1])
     with c_f1:
-        st.info("📊 **Monitoring Evaluation Report**: Kon mo-pakita og grey icon o balibaran sa browser, i-click ang button sa tulo para ma-open og tarong sa bag-ong tab.")
+        st.info("📊 **Monitoring Evaluation Report**: Showing primary MER sheet view. If display restrictions occur due to browser security settings, please use the button to launch the sheet in a new browser tab.")
     with c_f2:
         st.link_button("🔗 Open Full Google Sheet", sheet_url, use_container_width=True)
 
@@ -965,12 +965,12 @@ elif selected_view == "Finance":
     try:
         st.markdown(
             f"""
-            <iframe src="{embed_url}" width="100%" height="750" style="border: 1px solid #CBD5E1; border-radius: 8px; background-color: white;" allowfullscreen></iframe>
+            <iframe src="{embed_url}" width="100%" height="780" style="border: 1px solid #CBD5E1; border-radius: 8px; background-color: #FFFFFF;" allowfullscreen></iframe>
             """,
             unsafe_allow_html=True,
         )
     except Exception:
-        st.warning("⚠️ Kon dili gihapon mag-display ang Google Sheet preview, palihog gamita ang button sa taas para ma-open kini direct sa Google Sheets.")
+        st.warning("⚠️ Google Sheet preview restricted. Please click the button above to access the sheet directly.")
 
 # ---------------------------------------------------------
 # 9. SP PROFILE MODULE (OPTIMIZED FORM - REDUNDANCIES REMOVED)
