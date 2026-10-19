@@ -6,3 +6,5 @@ psycopg2-binary
 plotly
 openpyxl
 pytz
+XlsxWriter
+openpyxl
