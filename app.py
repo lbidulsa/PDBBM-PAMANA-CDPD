@@ -489,9 +489,10 @@ BARANGAY_ACTIVITIES = [
     "BAR", "OM", "2nd_BA", "Grievance_Intake", "GRS_Installation_Checklist", "CV", "ERS"
 ]
 
+# 🌟 ALL_TABS INCLUDES THE SPI_MASTERLIST MODULE
 ALL_TABS = [
     "Executive Dashboard", "User Management Portal", "CEAC_Municipal", "CEAC_Barangay",
-    "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "Summary", "Finance"
+    "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "SPI_Masterlist", "Summary", "Finance"
 ]
 
 current_role = st.session_state.get("user_role", "AC")
@@ -504,9 +505,9 @@ else:
 def can_edit_module(role, module):
     if role in ["Superuser", "Admin"]:
         return True
-    elif role == "AC" and module in ["CEAC_Municipal", "CEAC_Barangay", "Sub_Project_Closeout_Tracker"]:
+    elif role == "AC" and module in ["CEAC_Municipal", "CEAC_Barangay", "Sub_Project_Closeout_Tracker", "SPI_Masterlist"]:
         return True
-    elif role == "TF" and module in ["Geotagged_Photos", "Sub_Project_Closeout_Tracker"]:
+    elif role == "TF" and module in ["Geotagged_Photos", "Sub_Project_Closeout_Tracker", "SPI_Masterlist"]:
         return True
     elif role == "MFA" and module == "Disbursement":
         return True
@@ -663,7 +664,6 @@ elif selected_view == "User Management Portal":
     if "gen_temp_pass" not in st.session_state:
         st.session_state["gen_temp_pass"] = generate_random_password()
 
-    # 🌟 ADDED CEF ROLE TO THE USER ROLES LIST
     USER_ROLES_LIST = ["Superuser", "Admin", "AC", "TF", "MFA", "MDM", "CEF"]
 
     st.markdown("##### 🔴 Live System User Login Activity & Audit Log:")
@@ -968,7 +968,249 @@ elif selected_view == "Finance":
     )
 
 # ---------------------------------------------------------
-# 9. CEAC MUNICIPAL, BARANGAY, DISBURSEMENT & CLOSEOUT TRACKER MODULES
+# 9. SPI MASTERLIST MODULE (EXACT 74 HIGHLIGHTED COLUMNS)
+# ---------------------------------------------------------
+elif selected_view == "SPI_Masterlist":
+    st.subheader("📊 SPI Masterlist Management Module")
+
+    has_edit_perm = can_edit_module(current_role, "SPI_Masterlist")
+
+    if has_edit_perm:
+        if st.button("➕ Add New SPI Masterlist Record", use_container_width=True):
+            st.session_state["show_add_spi"] = not st.session_state.get("show_add_spi", False)
+
+        if st.session_state.get("show_add_spi", True):
+            with st.expander("📝 Comprehensive Entry Form: SPI Masterlist (All Highlighted Fields Included)", expanded=True):
+                with st.form("form_add_spi_masterlist"):
+                    spi_data = {}
+
+                    st.markdown("#### 1. Basic Sub-Project Profile & Category")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        spi_data["spid"] = st.text_input("Sub-Project ID (SPID)*", key="spi_spid")
+                        spi_data["sp_title"] = st.text_input("Sub-Project Title*", key="spi_sptitle")
+                        spi_data["major_category"] = st.text_input("Major Category", key="spi_majcat")
+                    with c2:
+                        spi_data["project_type"] = st.text_input("Project Type", key="spi_ptype")
+                        spi_data["no_of_package"] = st.number_input("No. of Packages", min_value=0, step=1, key="spi_nopack")
+                    with c3:
+                        spi_data["total_awarded"] = st.number_input("Total Awarded (₱)", min_value=0.0, key="spi_taward")
+                        spi_data["total_delivered"] = st.number_input("Total Delivered (₱)", min_value=0.0, key="spi_tdeliv")
+
+                    st.markdown("---")
+                    st.markdown("#### 2. Project Cost, Grants & Tranches")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        spi_data["kcgrant_amountmibf"] = st.number_input("KC Grant Amount MIBF (₱)", min_value=0.0, key="spi_kcg")
+                        spi_data["lcc_amount_mibf"] = st.number_input("LCC Amount MIBF (₱)", min_value=0.0, key="spi_lcca")
+                        spi_data["lcc_actual_amount"] = st.number_input("LCC Actual Amount (₱)", min_value=0.0, key="spi_lccact")
+                        spi_data["operation_maintainance_cost"] = st.number_input("Operation & Maintenance Cost (₱)", min_value=0.0, key="spi_omc")
+                    with c2:
+                        spi_data["final_grant_amount_mibf"] = st.number_input("Final Grant Amount MIBF (₱)", min_value=0.0, key="spi_fgrant")
+                        spi_data["final_lcc_amount_mibf"] = st.number_input("Final LCC Amount MIBF (₱)", min_value=0.0, key="spi_flcc")
+                        spi_data["total_release"] = st.number_input("Total Release (₱)", min_value=0.0, key="spi_totrel")
+                        spi_data["gross_utilization"] = st.number_input("Gross Utilization (₱)", min_value=0.0, key="spi_gutil")
+                    with c3:
+                        spi_data["first_tranche_actual_btf"] = st.number_input("1st Tranche BTF (₱)", min_value=0.0, key="spi_t1")
+                        spi_data["date_downloaded_trans_1"] = st.date_input("1st Tranche Date", datetime.date.today(), key="spi_t1d").strftime("%Y-%m-%d")
+                        spi_data["second_tranche_actual_btf"] = st.number_input("2nd Tranche BTF (₱)", min_value=0.0, key="spi_t2")
+                        spi_data["date_downloaded_trans_2"] = st.date_input("2nd Tranche Date", datetime.date.today(), key="spi_t2d").strftime("%Y-%m-%d")
+                        spi_data["third_tranche_actual_btf"] = st.number_input("3rd Tranche BTF (₱)", min_value=0.0, key="spi_t3")
+                        spi_data["date_downloaded_trans_3"] = st.date_input("3rd Tranche Date", datetime.date.today(), key="spi_t3d").strftime("%Y-%m-%d")
+                        spi_data["gross_liquidation"] = st.number_input("Gross Liquidation (₱)", min_value=0.0, key="spi_gliq")
+                        spi_data["refunded"] = st.number_input("Refunded Amount (₱)", min_value=0.0, key="spi_ref")
+
+                    st.markdown("---")
+                    st.markdown("#### 3. Dates, Physical Accomplishment & Status")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        spi_data["date_started"] = st.date_input("Date Started", datetime.date.today(), key="spi_ds").strftime("%Y-%m-%d")
+                        spi_data["date_of_completion"] = st.date_input("Date of Completion", datetime.date.today(), key="spi_dc").strftime("%Y-%m-%d")
+                        spi_data["planned_date_of_completion"] = st.date_input("Planned Date of Completion", datetime.date.today(), key="spi_pdc").strftime("%Y-%m-%d")
+                        spi_data["final_date_of_completion"] = st.date_input("Final Date of Completion", datetime.date.today(), key="spi_fdc").strftime("%Y-%m-%d")
+                        spi_data["final_date_of_completion_v2"] = st.date_input("Final Date of Completion V2", datetime.date.today(), key="spi_fdcv2").strftime("%Y-%m-%d")
+                    with c2:
+                        spi_data["physical_accomplishment_percentage_original_pow"] = st.number_input("Physical Accomplishment % (Original POW)", min_value=0.0, max_value=100.0, key="spi_pa_pow")
+                        spi_data["physical_status_original_pow"] = st.text_input("Physical Status (Original POW)", key="spi_ps_pow")
+                        spi_data["physical_accomplishment_percentage_as_per_vo"] = st.number_input("Physical Accomplishment % (VO)", min_value=0.0, max_value=100.0, key="spi_pa_vo")
+                        spi_data["date_of_completion_as_per_vo"] = st.date_input("Completion Date (per VO)", datetime.date.today(), key="spi_dc_vo").strftime("%Y-%m-%d")
+                        spi_data["final_physical_status"] = st.selectbox("Final Physical Status", ["Completed", "On-going", "For Implementation", "Cancelled"], key="spi_fps")
+                        spi_data["final_physical_accomplishment"] = st.number_input("Final Physical Accomplishment %", min_value=0.0, max_value=100.0, key="spi_fpa")
+                    with c3:
+                        # 🌟 CHECKBOXES FOR YES/NO FIELDS
+                        spi_data["has_variation_order"] = "Yes" if st.checkbox("Has Variation Order?", key="spi_c_vo") else "No"
+                        spi_data["has_booked"] = "Yes" if st.checkbox("Has Booked Asset?", key="spi_c_bk") else "No"
+                        spi_data["booked_date"] = st.date_input("Booked Date", datetime.date.today(), key="spi_bd").strftime("%Y-%m-%d")
+                        spi_data["closed_account"] = "Yes" if st.checkbox("Closed Bank Account?", key="spi_c_ca") else "No"
+
+                    st.markdown("---")
+                    st.markdown("#### 4. Complete Beneficiary Breakdown")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        spi_data["no_of_household_beneficiaries_target"] = st.number_input("Target HH Beneficiaries", min_value=0, step=1, key="spi_thh")
+                        spi_data["no_of_ip_household_bene_target"] = st.number_input("Target IP HH Beneficiaries", min_value=0, step=1, key="spi_tip_hh")
+                        spi_data["no_of_household_beneficiaries_actual"] = st.number_input("Actual HH Beneficiaries", min_value=0, step=1, key="spi_ahh")
+                        spi_data["no_of_families_beneficiaries_target"] = st.number_input("Target Family Beneficiaries", min_value=0, step=1, key="spi_tfam")
+                        spi_data["no_of_families_beneficiaries_actual"] = st.number_input("Actual Family Beneficiaries", min_value=0, step=1, key="spi_afam")
+                    with c2:
+                        spi_data["no_actual_pantawid_households"] = st.number_input("Actual Pantawid HHs", min_value=0, step=1, key="spi_pthh")
+                        spi_data["no_actual_pantawid_families"] = st.number_input("Actual Pantawid Families", min_value=0, step=1, key="spi_ptfam")
+                        spi_data["no_actual_slp_households"] = st.number_input("Actual SLP HHs", min_value=0, step=1, key="spi_slphh")
+                        spi_data["no_actual_slp_families"] = st.number_input("Actual SLP Families", min_value=0, step=1, key="spi_slpfam")
+                    with c3:
+                        spi_data["no_actual_ip_households"] = st.number_input("Actual IP HHs", min_value=0, step=1, key="spi_ip_hh")
+                        spi_data["no_actual_ip_families"] = st.number_input("Actual IP Families", min_value=0, step=1, key="spi_ip_fam")
+                        spi_data["no_actual_male"] = st.number_input("Actual Male Beneficiaries", min_value=0, step=1, key="spi_mb")
+                        spi_data["no_actual_female"] = st.number_input("Actual Female Beneficiaries", min_value=0, step=1, key="spi_fb")
+
+                    st.markdown("---")
+                    st.markdown("#### 5. Environmental & Social Safeguards and Land Acquisition (All Checkboxes)")
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        spi_data["has_scanned_spcr"] = "Yes" if st.checkbox("Has Scanned SPCR?", key="spi_c_spcr") else "No"
+                        spi_data["has_turnover_certificate"] = "Yes" if st.checkbox("Has Turnover Certificate?", key="spi_c_toc") else "No"
+                        spi_data["with_ip_presence"] = "Yes" if st.checkbox("With IP Presence?", key="spi_c_ipp") else "No"
+                        spi_data["with_esmp"] = "Yes" if st.checkbox("With ESMP?", key="spi_c_esmp") else "No"
+                        spi_data["with_essc"] = "Yes" if st.checkbox("With ESSC?", key="spi_c_essc") else "No"
+                        spi_data["with_cnc"] = "Yes" if st.checkbox("With CNC?", key="spi_c_cnc") else "No"
+                        spi_data["with_cadt"] = "Yes" if st.checkbox("With CADT?", key="spi_c_cadt") else "No"
+                        spi_data["with_ecc"] = "Yes" if st.checkbox("With ECC?", key="spi_c_ecc") else "No"
+                        spi_data["on_process"] = "Yes" if st.checkbox("Safeguards On Process?", key="spi_c_proc") else "No"
+                    with c2:
+                        spi_data["land_acq_with_deed_of_donation"] = "Yes" if st.checkbox("Deed of Donation?", key="spi_c_dod") else "No"
+                        spi_data["land_aq_with_unsfruct"] = "Yes" if st.checkbox("Usufruct Agreement?", key="spi_c_usu") else "No"
+                        spi_data["land_acq_with_right_of_way_agreement"] = "Yes" if st.checkbox("Right of Way Agreement?", key="spi_c_row") else "No"
+                        spi_data["land_acq_with_quit_claim"] = "Yes" if st.checkbox("Quit Claim?", key="spi_c_qc") else "No"
+                        spi_data["land_acq_with_permit_to_construc_enter"] = "Yes" if st.checkbox("Permit to Construct / Enter?", key="spi_c_pce") else "No"
+                        spi_data["land_acq_with_blgu_resolution"] = "Yes" if st.checkbox("BLGU Resolution?", key="spi_c_blgu") else "No"
+                        spi_data["land_acq_with_deped_certification"] = "Yes" if st.checkbox("DepEd Certification?", key="spi_c_deped") else "No"
+                        spi_data["land_acq_with_other_permit_clearance"] = "Yes" if st.checkbox("Other Permits / Clearances?", key="spi_c_operm") else "No"
+                        spi_data["sps_with_land_acquisition_documents"] = "Yes" if st.checkbox("SPs with Land Acquisition Docs?", key="spi_c_ladoc") else "No"
+                    with c3:
+                        spi_data["submitted_request_validation_ncip_sps_with_ip_population"] = "Yes" if st.checkbox("Submitted Request Validation NCIP?", key="spi_c_ncip_req") else "No"
+                        spi_data["validation_conducted_for_sps_with_ip_population"] = "Yes" if st.checkbox("Validation Conducted NCIP?", key="spi_c_ncip_val") else "No"
+                        spi_data["with_cp_for_sps_with_ip_population"] = "Yes" if st.checkbox("With Certificate Precondition (CP)?", key="spi_c_cp") else "No"
+                        spi_data["with_cno_for_sps_with_ip_population"] = "Yes" if st.checkbox("With Certificate of Non-Overlap (CNO)?", key="spi_c_cno") else "No"
+                        spi_data["with_cp_or_with_cno_for_sps_with_ip_population"] = "Yes" if st.checkbox("With CP or CNO?", key="spi_c_cpcno") else "No"
+                        spi_data["created_date"] = datetime.date.today().strftime("%Y-%m-%d")
+                        spi_data["created_by"] = st.session_state["user_name"]
+
+                    st.markdown("---")
+                    save_spi_btn = st.form_submit_button("💾 Save Full SPI Record to Database", use_container_width=True)
+
+                    if save_spi_btn:
+                        if not spi_data.get("spid") or not spi_data.get("sp_title"):
+                            st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug sulati ang Sub-Project ID (SPID) ug Sub-Project Title!")
+                        else:
+                            col_names_str = ", ".join(spi_data.keys())
+                            placeholders = ", ".join([f":{k}" for k in spi_data.keys()])
+                            try:
+                                with engine.begin() as conn:
+                                    conn.execute(
+                                        text(f"INSERT INTO spi_masterlist ({col_names_str}) VALUES ({placeholders})"),
+                                        spi_data,
+                                    )
+                                st.toast("✅ Full SPI Masterlist record saved to Supabase!", icon="🎉")
+                                st.success("Record saved successfully!")
+                                st.session_state["show_add_spi"] = False
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"❌ DATABASE ERROR: {ex}")
+    else:
+        st.info(f"👁️ **VIEW-ONLY MODE:** Your assigned role (`{current_role}`) is restricted from adding or editing records in SPI Masterlist.")
+
+    st.markdown("---")
+    st.subheader("📊 SPI Masterlist Master Database Table")
+
+    df_spi = load_db_table("spi_masterlist")
+    search_spi = st.text_input("🔍 Search SPI Masterlist Records:", "", key="spi_search_kw")
+    df_spi_filtered = df_spi.copy()
+
+    if search_spi and not df_spi_filtered.empty:
+        mask = df_spi_filtered.astype(str).apply(lambda row: row.str.contains(search_spi, case=False).any(), axis=1)
+        df_spi_filtered = df_spi_filtered[mask]
+
+    if not df_spi_filtered.empty:
+        can_sync_spi = (current_role in ["Superuser", "Admin"]) or has_edit_perm
+
+        edited_spi_df = st.data_editor(
+            df_spi_filtered,
+            use_container_width=True,
+            num_rows="dynamic" if can_sync_spi else "fixed",
+            disabled=not can_sync_spi,
+            key="editor_spi_masterlist",
+        )
+
+        if can_sync_spi and st.button("💾 Sync SPI Table Changes to Database", key="sync_btn_spi"):
+            try:
+                with engine.begin() as conn:
+                    edited_spi_df.to_sql("spi_masterlist", conn, if_exists="replace", index=False)
+                st.toast("✅ SPI Table synchronized to Supabase!", icon="🎉")
+                st.success("Database synchronized successfully!")
+                st.rerun()
+            except Exception as ex:
+                st.error(f"❌ DATABASE ERROR: {ex}")
+
+        # 👑 SUPERUSER ACTION PANEL (EDIT / DELETE ROW)
+        if current_role == "Superuser" and "id" in df_spi_filtered.columns:
+            st.markdown("---")
+            with st.expander("⚙️ Superuser Record Action Panel (Edit / Delete Row in SPI Masterlist)"):
+                row_ids = df_spi_filtered["id"].tolist()
+                selected_row_id = st.selectbox("Select Row ID to Edit or Delete:", row_ids, key="sel_id_spi_masterlist")
+
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button("✏️ Edit Selected Record", use_container_width=True, key="btn_edit_spi_masterlist"):
+                        st.session_state["editing_id_spi_masterlist"] = selected_row_id
+
+                with col_btn2:
+                    if st.button("🗑️ Delete Selected Record", use_container_width=True, key="btn_del_spi_masterlist"):
+                        try:
+                            with engine.begin() as conn:
+                                conn.execute(text("DELETE FROM spi_masterlist WHERE id = :id"), {"id": selected_row_id})
+                            st.toast("✅ Record deleted from Supabase!", icon="🗑️")
+                            st.success(f"Record ID {selected_row_id} deleted successfully!")
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"❌ DATABASE ERROR: {ex}")
+
+                if st.session_state.get("editing_id_spi_masterlist") == selected_row_id:
+                    st.markdown(f"##### 📝 Editing Record ID: `{selected_row_id}`")
+                    row_data = df_spi_filtered[df_spi_filtered["id"] == selected_row_id].iloc[0].to_dict()
+
+                    with st.form(f"form_edit_spi_{selected_row_id}"):
+                        updated_vals = {}
+                        col_e1, col_e2 = st.columns(2)
+                        keys = [k for k in row_data.keys() if k != "id"]
+
+                        for idx, k in enumerate(keys):
+                            val = row_data[k]
+                            target_col = col_e1 if idx % 2 == 0 else col_e2
+                            if isinstance(val, (int, float)) and not pd.isna(val):
+                                updated_vals[k] = target_col.number_input(f"{k}", value=float(val))
+                            else:
+                                updated_vals[k] = target_col.text_input(f"{k}", value=str(val) if not pd.isna(val) else "")
+
+                        save_edit_btn = st.form_submit_button("💾 Save Updated Record Changes", use_container_width=True)
+                        if save_edit_btn:
+                            try:
+                                set_clause = ", ".join([f"{k} = :{k}" for k in updated_vals.keys()])
+                                updated_vals["id"] = selected_row_id
+
+                                with engine.begin() as conn:
+                                    conn.execute(text(f"UPDATE spi_masterlist SET {set_clause} WHERE id = :id"), updated_vals)
+
+                                st.toast("✅ Record updated successfully!", icon="💾")
+                                st.success(f"Record ID {selected_row_id} updated!")
+                                st.session_state["editing_id_spi_masterlist"] = None
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"❌ DATABASE ERROR: {ex}")
+    else:
+        st.info("No records found in SPI Masterlist.")
+
+# ---------------------------------------------------------
+# 10. CEAC MUNICIPAL, BARANGAY, DISBURSEMENT & CLOSEOUT TRACKER MODULES
 # ---------------------------------------------------------
 else:
     st.subheader(f"📋 Data Management & Encoding: {selected_view}")
