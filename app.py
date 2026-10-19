@@ -512,6 +512,8 @@ def can_edit_module(role, module):
         return True
     elif role == "MDM" and module in ["CEAC_Municipal", "CEAC_Barangay"]:
         return True
+    elif role == "CEF":
+        return False  # CEF is strictly View-Only across all modules
     return False
 
 def save_uploaded_file(file_obj):
@@ -661,7 +663,8 @@ elif selected_view == "User Management Portal":
     if "gen_temp_pass" not in st.session_state:
         st.session_state["gen_temp_pass"] = generate_random_password()
 
-    USER_ROLES_LIST = ["Superuser", "Admin", "AC", "TF", "MFA", "MDM"]
+    # 🌟 ADDED CEF ROLE TO THE USER ROLES LIST
+    USER_ROLES_LIST = ["Superuser", "Admin", "AC", "TF", "MFA", "MDM", "CEF"]
 
     st.markdown("##### 🔴 Live System User Login Activity & Audit Log:")
 
@@ -792,7 +795,7 @@ elif selected_view == "User Management Portal":
     st.dataframe(df_users, use_container_width=True, hide_index=True)
 
 # ---------------------------------------------------------
-# 7. GEOTAGGED PHOTOS MODULE (WITH INJECTED REFRESH BUTTON)
+# 7. GEOTAGGED PHOTOS MODULE
 # ---------------------------------------------------------
 elif selected_view == "Geotagged_Photos":
     st.subheader("📸 Geotagged Photos & Progress File Uploads")
@@ -862,12 +865,10 @@ elif selected_view == "Geotagged_Photos":
 
     st.markdown("---")
     
-    # 🖼️ PHOTO GALLERY WITH INJECTED REFRESH BUTTON
     col_gal_hdr, col_gal_btn = st.columns([3, 1])
     with col_gal_hdr:
         st.subheader("🖼️ Geotagged Photos Gallery & Interactive Viewer")
     with col_gal_btn:
-        # 🔄 INJECTED REFRESH BUTTON
         if st.button("🔄 Refresh Photos / Reload Gallery", use_container_width=True, key="btn_refresh_photos"):
             st.cache_data.clear()
             st.toast("⚡ Gallery Refreshed!", icon="🔄")
@@ -896,7 +897,6 @@ elif selected_view == "Geotagged_Photos":
                     st.markdown(f"**📌 {row.get('sp_name', 'Sub-Project')}**")
                     st.caption(f"🆔 **SP ID:** `{row.get('sp_id', 'N/A')}` | 🏗️ **Stage:** `{row.get('stage', 'N/A')}`")
 
-                    # 🔄 ROTATION SELECTOR FOR EACH PHOTO
                     rot_deg = st.selectbox(
                         f"🔄 Rotate Photo ({row.get('id', idx)})",
                         options=[0, 90, 180, 270],
