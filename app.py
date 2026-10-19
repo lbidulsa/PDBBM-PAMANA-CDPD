@@ -792,7 +792,7 @@ elif selected_view == "User Management Portal":
     st.dataframe(df_users, use_container_width=True, hide_index=True)
 
 # ---------------------------------------------------------
-# 7. GEOTAGGED PHOTOS MODULE (WITH INJECTED PHOTO VIEWER / GALLERY)
+# 7. GEOTAGGED PHOTOS MODULE (WITH INJECTED REFRESH BUTTON)
 # ---------------------------------------------------------
 elif selected_view == "Geotagged_Photos":
     st.subheader("📸 Geotagged Photos & Progress File Uploads")
@@ -800,6 +800,8 @@ elif selected_view == "Geotagged_Photos":
     if can_edit_module(current_role, "Geotagged_Photos"):
         with st.expander("📤 Upload New Geotagged Photo", expanded=True):
             uploaded_file = st.file_uploader("Choose Photo / File (JPG / PNG)", type=["jpg", "jpeg", "png", "pdf"], key="geo_upl_file")
+
+            st.info("💡 **Note:** You can use timestamp photos/images to detect Latitude and Longitude.")
 
             detected_lat, detected_lon = "", ""
             if uploaded_file and uploaded_file.type in ["image/jpeg", "image/png"]:
@@ -860,12 +862,20 @@ elif selected_view == "Geotagged_Photos":
 
     st.markdown("---")
     
-    # 🌟 INJECTED PHOTO GALLERY & VIEWER FOR ALL USERS
-    st.subheader("🖼️ Geotagged Photos Gallery & Interactive Viewer")
+    # 🖼️ PHOTO GALLERY WITH INJECTED REFRESH BUTTON
+    col_gal_hdr, col_gal_btn = st.columns([3, 1])
+    with col_gal_hdr:
+        st.subheader("🖼️ Geotagged Photos Gallery & Interactive Viewer")
+    with col_gal_btn:
+        # 🔄 INJECTED REFRESH BUTTON
+        if st.button("🔄 Refresh Photos / Reload Gallery", use_container_width=True, key="btn_refresh_photos"):
+            st.cache_data.clear()
+            st.toast("⚡ Gallery Refreshed!", icon="🔄")
+            st.rerun()
+
     df_photos = load_db_table("geotagged_photos")
 
     if not df_photos.empty:
-        # Search & Filter
         sp_filter = st.text_input("🔍 Search Photo by Sub-Project ID, Name, or Stage:", "", key="photo_search_input")
         df_p_filtered = df_photos.copy()
         
@@ -875,7 +885,7 @@ elif selected_view == "Geotagged_Photos":
 
         if not df_p_filtered.empty:
             st.markdown("##### 📷 Uploaded Photos Cards Grid:")
-            cols = st.columns(3) # 3-column photo grid layout
+            cols = st.columns(3)
             
             for idx, (_, row) in enumerate(df_p_filtered.iterrows()):
                 col_target = cols[idx % 3]
@@ -886,9 +896,20 @@ elif selected_view == "Geotagged_Photos":
                     st.markdown(f"**📌 {row.get('sp_name', 'Sub-Project')}**")
                     st.caption(f"🆔 **SP ID:** `{row.get('sp_id', 'N/A')}` | 🏗️ **Stage:** `{row.get('stage', 'N/A')}`")
 
+                    # 🔄 ROTATION SELECTOR FOR EACH PHOTO
+                    rot_deg = st.selectbox(
+                        f"🔄 Rotate Photo ({row.get('id', idx)})",
+                        options=[0, 90, 180, 270],
+                        format_func=lambda x: f"Original (0°)" if x == 0 else f"Rotate {x}°",
+                        key=f"rot_{row.get('id', idx)}"
+                    )
+
                     if p_path and os.path.exists(p_path):
                         try:
                             img_obj = Image.open(p_path)
+                            if rot_deg > 0:
+                                img_obj = img_obj.rotate(360 - rot_deg, expand=True)
+
                             st.image(img_obj, use_container_width=True, caption=f"📸 File: {p_file_name}")
                         except Exception:
                             st.warning(f"⚠️ Photo file '{p_file_name}' cannot be opened.")
@@ -905,7 +926,6 @@ elif selected_view == "Geotagged_Photos":
         st.subheader("📋 Raw Geotagged Photos Database Masterlist")
         st.dataframe(df_photos, use_container_width=True)
 
-        # 👑 SUPERUSER ACTION PANEL FOR PHOTOS
         if current_role == "Superuser" and "id" in df_photos.columns:
             with st.expander("⚙️ Superuser Action Panel (Delete Photo Record)"):
                 photo_ids = df_photos["id"].tolist()
