@@ -1202,7 +1202,7 @@ elif selected_view == "SP_Profile":
         st.info("No records found in SP Profile.")
 
 # ---------------------------------------------------------
-# 10. DATA EXTRACTION & EXPORT MODULE (NEW MODULE)
+# 10. DATA EXTRACTION & EXPORT MODULE (ERROR-PROOFED)
 # ---------------------------------------------------------
 elif selected_view == "Data Extraction & Export":
     st.subheader("📥 Data Extraction & Export Center")
@@ -1265,20 +1265,33 @@ elif selected_view == "Data Extraction & Export":
             st.markdown("##### 💾 Download Report Options")
             btn_col1, btn_col2 = st.columns(2)
 
-            # Excel Download Generator
+            # Fallback Safe Excel Generator
             excel_buffer = io.BytesIO()
-            with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
-                df_filtered_export.to_excel(writer, index=False, sheet_name=selected_mod[:30])
-            excel_data = excel_buffer.getvalue()
+            try:
+                with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+                    df_filtered_export.to_excel(writer, index=False, sheet_name=selected_mod[:30])
+                excel_data = excel_buffer.getvalue()
+                has_excel = True
+            except Exception:
+                try:
+                    with pd.ExcelWriter(excel_buffer, engine="xlsxwriter") as writer:
+                        df_filtered_export.to_excel(writer, index=False, sheet_name=selected_mod[:30])
+                    excel_data = excel_buffer.getvalue()
+                    has_excel = True
+                except Exception:
+                    has_excel = False
 
             with btn_col1:
-                st.download_button(
-                    label="📊 Download Excel (.xlsx)",
-                    data=excel_data,
-                    file_name=f"{selected_mod}_Report_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                )
+                if has_excel:
+                    st.download_button(
+                        label="📊 Download Excel (.xlsx)",
+                        data=excel_data,
+                        file_name=f"{selected_mod}_Report_{datetime.date.today().strftime('%Y%m%d')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                    )
+                else:
+                    st.warning("⚠️ Excel engine not installed. Use CSV Download below.")
 
             # CSV Download Generator
             csv_data = df_filtered_export.to_csv(index=False).encode("utf-8")
