@@ -818,7 +818,7 @@ elif selected_view == "User Management Portal":
         pass
 
 # ---------------------------------------------------------
-# 7. GEOTAGGED PHOTOS MODULE (PERMANENT BASE64 STORAGE ADDED)
+# 7. GEOTAGGED PHOTOS MODULE (PERMANENT BASE64 STORAGE)
 # ---------------------------------------------------------
 elif selected_view == "Geotagged_Photos":
     st.subheader("📸 Geotagged Photos & Progress File Uploads")
