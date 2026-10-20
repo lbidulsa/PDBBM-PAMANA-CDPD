@@ -28,9 +28,6 @@ try:
 except ImportError:
     HAS_GEO_EVAL = False
 
-# EXCLUDED CDPD ACCOUNTS LIST FOR USER MANAGEMENT
-EXCLUDED_CDPD_EMAILS = ("llgatabon.fo10@dswd.gov.ph", "djlwaniwan.fo10@dswd.gov.ph", "stepcelo@gmail.com")
-
 # ---------------------------------------------------------
 # 🇵🇭 TIMEZONE HELPER FUNCTION FOR PHILIPPINE STANDARD TIME
 # ---------------------------------------------------------
@@ -656,7 +653,7 @@ if selected_view == "Executive Dashboard":
             st.info("No beneficiary records found.")
 
 # ---------------------------------------------------------
-# 6. USER MANAGEMENT PORTAL (SUPERUSER ONLY - EXCLUSION FILTERED)
+# 6. USER MANAGEMENT PORTAL (SUPERUSER ONLY - ALL ACCOUNTS INCLUDED)
 # ---------------------------------------------------------
 elif selected_view == "User Management Portal":
     if current_role != "Superuser":
@@ -672,10 +669,10 @@ elif selected_view == "User Management Portal":
 
     st.markdown("##### 🔴 Live System User Login Activity & Audit Log:")
 
+    # LIVE LOGS - ALL USERS
     with engine.connect() as conn:
         active_logs = conn.execute(
-            text("SELECT id, full_name, email, user_role, last_login FROM user_accounts WHERE lower(email) NOT IN :ex_emails ORDER BY last_login DESC NULLS LAST"),
-            {"ex_emails": EXCLUDED_CDPD_EMAILS}
+            text("SELECT id, full_name, email, user_role, last_login FROM user_accounts ORDER BY last_login DESC NULLS LAST")
         ).fetchall()
 
     if active_logs:
@@ -747,12 +744,13 @@ elif selected_view == "User Management Portal":
                 else:
                     st.error("Please fill in Full Name and Email Address.")
 
+    # RESET PASSWORD - ALL ACCOUNTS INCLUDED
     with col_u2:
         st.markdown("##### 🔑 Reset User Password (with Live Search)")
         user_search = st.text_input("🔍 Search User Name or Email:")
 
-        query_u = "SELECT id, full_name, email, user_role FROM user_accounts WHERE user_role != 'Superuser' AND lower(email) NOT IN :ex_emails"
-        params_u = {"ex_emails": EXCLUDED_CDPD_EMAILS}
+        query_u = "SELECT id, full_name, email, user_role FROM user_accounts WHERE user_role != 'Superuser'"
+        params_u = {}
 
         if user_search:
             query_u += " AND (lower(full_name) LIKE lower(:s) OR lower(email) LIKE lower(:s))"
@@ -793,11 +791,12 @@ elif selected_view == "User Management Portal":
 
     st.markdown("---")
     st.subheader("📋 Registered Users Masterlist & Login Timestamps")
+    
+    # MASTERLIST TABLE - ALL ACCOUNTS INCLUDED (INCLUSIVE OF CDPD ADMINS)
     try:
         df_users = pd.read_sql_query(
-            text("SELECT id, full_name, email, user_role, require_change_pass, last_login FROM user_accounts WHERE lower(email) NOT IN :ex_emails ORDER BY id DESC"),
-            engine,
-            params={"ex_emails": EXCLUDED_CDPD_EMAILS}
+            text("SELECT id, full_name, email, user_role, require_change_pass, last_login FROM user_accounts ORDER BY id DESC"),
+            engine
         )
         if not df_users.empty and "last_login" in df_users.columns:
             df_users["last_login"] = df_users["last_login"].apply(format_ph_time)
