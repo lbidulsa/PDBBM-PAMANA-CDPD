@@ -1,3 +1,4 @@
+import base64
 import datetime
 import io
 import os
@@ -51,6 +52,17 @@ def format_ph_time(dt_val):
         return dt_ph.strftime("%B %d, %Y - %I:%M %p")
     except Exception:
         return str(dt_val)
+
+# ---------------------------------------------------------
+# BASE64 CONVERT HELPER FOR PERMANENT IMAGE STORAGE
+# ---------------------------------------------------------
+def convert_image_to_base64(uploaded_file):
+    """Converts uploaded photo directly to Base64 string for database storage"""
+    if uploaded_file is not None:
+        file_bytes = uploaded_file.getvalue()
+        base64_encoded = base64.b64encode(file_bytes).decode('utf-8')
+        return f"data:{uploaded_file.type};base64,{base64_encoded}"
+    return ""
 
 # ---------------------------------------------------------
 # PAGE CONFIGURATION & CUSTOM STYLING
@@ -312,6 +324,7 @@ def load_db_table(table_name):
 try:
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE;"))
+        conn.execute(text("ALTER TABLE geotagged_photos ADD COLUMN IF NOT EXISTS image_base64 TEXT;"))
 except Exception:
     pass
 
@@ -805,7 +818,7 @@ elif selected_view == "User Management Portal":
         pass
 
 # ---------------------------------------------------------
-# 7. GEOTAGGED PHOTOS MODULE
+# 7. GEOTAGGED PHOTOS MODULE (PERMANENT BASE64 STORAGE ADDED)
 # ---------------------------------------------------------
 elif selected_view == "Geotagged_Photos":
     st.subheader("📸 Geotagged Photos & Progress File Uploads")
@@ -848,24 +861,29 @@ elif selected_view == "Geotagged_Photos":
                         st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug mag-upload og file ug isulat ang Sub-Project ID (o 'N/A')!")
                     else:
                         try:
+                            # 1. Backup file to local folder
                             file_path = os.path.join("uploaded_photos", uploaded_file.name)
                             with open(file_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
 
+                            # 2. Convert file to permanent Base64 string for database storage
+                            b64_img = convert_image_to_base64(uploaded_file)
+
                             with engine.begin() as conn:
                                 conn.execute(
                                     text("""
-                                        INSERT INTO geotagged_photos (sp_id, sp_name, stage, latitude, longitude, photo_file, date_uploaded, encoder)
-                                        VALUES (:sp_id, :sp_name, :stage, :lat, :lon, :file, CURRENT_DATE, :encoder)
+                                        INSERT INTO geotagged_photos (sp_id, sp_name, stage, latitude, longitude, photo_file, date_uploaded, encoder, image_base64)
+                                        VALUES (:sp_id, :sp_name, :stage, :lat, :lon, :file, CURRENT_DATE, :encoder, :b64)
                                     """),
                                     {
                                         "sp_id": sp_id.strip(), "sp_name": sp_name, "stage": stage,
                                         "lat": latitude, "lon": longitude, "file": uploaded_file.name,
                                         "encoder": st.session_state["user_name"],
+                                        "b64": b64_img
                                     },
                                 )
 
-                            st.toast("✅ Geotagged photo saved to Supabase!", icon="📸")
+                            st.toast("✅ Geotagged photo saved permanently to Supabase!", icon="📸")
                             st.success(f"Photo '{uploaded_file.name}' saved to database successfully!")
                             st.rerun()
                         except Exception as ex:
@@ -902,6 +920,7 @@ elif selected_view == "Geotagged_Photos":
                 col_target = cols[idx % 3]
                 p_file_name = row.get("photo_file", "")
                 p_path = os.path.join("uploaded_photos", str(p_file_name)) if p_file_name else ""
+                b64_val = row.get("image_base64", None)
 
                 with col_target:
                     st.markdown(f"**📌 {row.get('sp_name', 'Sub-Project')}**")
@@ -914,7 +933,10 @@ elif selected_view == "Geotagged_Photos":
                         key=f"rot_{row.get('id', idx)}"
                     )
 
-                    if p_path and os.path.exists(p_path):
+                    # PRIORITIZE DISPLAYING BASE64 FROM SUPABASE DATABASE (PERMANENT)
+                    if pd.notna(b64_val) and str(b64_val).startswith("data:image"):
+                        st.image(b64_val, use_container_width=True, caption=f"📸 File: {p_file_name}")
+                    elif p_path and os.path.exists(p_path):
                         try:
                             img_obj = Image.open(p_path)
                             if rot_deg > 0:
@@ -924,7 +946,7 @@ elif selected_view == "Geotagged_Photos":
                         except Exception:
                             st.warning(f"⚠️ Photo file '{p_file_name}' cannot be opened.")
                     else:
-                        st.info(f"📁 File Name: `{p_file_name}`\n\n*(Local preview file not found in uploaded_photos directory)*")
+                        st.warning(f"⚠️ **Photo File Missing on Server:** `{p_file_name}`\n\n*(Palihug i-upload usab ang litrato para ma-store na kini sa Database)*")
 
                     st.markdown(f"📍 **GPS:** `{row.get('latitude', '')}, {row.get('longitude', '')}`")
                     st.caption(f"👤 Encoder: {row.get('encoder', 'N/A')} | 📅 Date: {row.get('date_uploaded', 'N/A')}")
