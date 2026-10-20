@@ -28,6 +28,9 @@ try:
 except ImportError:
     HAS_GEO_EVAL = False
 
+# EXCLUDED CDPD ACCOUNTS LIST FOR USER MANAGEMENT
+EXCLUDED_CDPD_EMAILS = ("llgatabon.fo10@dswd.gov.ph", "djlwaniwan.fo10@dswd.gov.ph", "stepcelo@gmail.com")
+
 # ---------------------------------------------------------
 # 🇵🇭 TIMEZONE HELPER FUNCTION FOR PHILIPPINE STANDARD TIME
 # ---------------------------------------------------------
@@ -183,8 +186,8 @@ def generate_random_password(length=10):
     return "".join(secrets.choice(chars) for _ in range(length))
 
 def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User"):
-    sender_email = "lbidulsa.fo10@dswd.gov.ph"
-    sender_password = "rkgqurmorpvfgktq"
+    sender_email = st.secrets.get("EMAIL_SENDER", "lbidulsa.fo10@dswd.gov.ph")
+    sender_password = st.secrets.get("EMAIL_PASSWORD", "rkgqurmorpvfgktq")
     system_link = "https://pdbbmpamanacdpd.streamlit.app/"
 
     try:
@@ -653,7 +656,7 @@ if selected_view == "Executive Dashboard":
             st.info("No beneficiary records found.")
 
 # ---------------------------------------------------------
-# 6. USER MANAGEMENT PORTAL (SUPERUSER ONLY)
+# 6. USER MANAGEMENT PORTAL (SUPERUSER ONLY - EXCLUSION FILTERED)
 # ---------------------------------------------------------
 elif selected_view == "User Management Portal":
     if current_role != "Superuser":
@@ -670,7 +673,10 @@ elif selected_view == "User Management Portal":
     st.markdown("##### 🔴 Live System User Login Activity & Audit Log:")
 
     with engine.connect() as conn:
-        active_logs = conn.execute(text("SELECT id, full_name, email, user_role, last_login FROM user_accounts ORDER BY last_login DESC NULLS LAST")).fetchall()
+        active_logs = conn.execute(
+            text("SELECT id, full_name, email, user_role, last_login FROM user_accounts WHERE lower(email) NOT IN :ex_emails ORDER BY last_login DESC NULLS LAST"),
+            {"ex_emails": EXCLUDED_CDPD_EMAILS}
+        ).fetchall()
 
     if active_logs:
         col_act1, col_act2 = st.columns([2, 1])
@@ -745,8 +751,8 @@ elif selected_view == "User Management Portal":
         st.markdown("##### 🔑 Reset User Password (with Live Search)")
         user_search = st.text_input("🔍 Search User Name or Email:")
 
-        query_u = "SELECT id, full_name, email, user_role FROM user_accounts WHERE user_role != 'Superuser'"
-        params_u = {}
+        query_u = "SELECT id, full_name, email, user_role FROM user_accounts WHERE user_role != 'Superuser' AND lower(email) NOT IN :ex_emails"
+        params_u = {"ex_emails": EXCLUDED_CDPD_EMAILS}
 
         if user_search:
             query_u += " AND (lower(full_name) LIKE lower(:s) OR lower(email) LIKE lower(:s))"
@@ -787,13 +793,17 @@ elif selected_view == "User Management Portal":
 
     st.markdown("---")
     st.subheader("📋 Registered Users Masterlist & Login Timestamps")
-    df_users = load_db_table("user_accounts")
-    if not df_users.empty:
-        if "password" in df_users.columns:
-            df_users = df_users.drop(columns=["password"])
-        if "last_login" in df_users.columns:
+    try:
+        df_users = pd.read_sql_query(
+            text("SELECT id, full_name, email, user_role, require_change_pass, last_login FROM user_accounts WHERE lower(email) NOT IN :ex_emails ORDER BY id DESC"),
+            engine,
+            params={"ex_emails": EXCLUDED_CDPD_EMAILS}
+        )
+        if not df_users.empty and "last_login" in df_users.columns:
             df_users["last_login"] = df_users["last_login"].apply(format_ph_time)
-    st.dataframe(df_users, use_container_width=True, hide_index=True)
+        st.dataframe(df_users, use_container_width=True, hide_index=True)
+    except Exception:
+        pass
 
 # ---------------------------------------------------------
 # 7. GEOTAGGED PHOTOS MODULE
