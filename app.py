@@ -191,7 +191,8 @@ if hasattr(st, "dialog"):
         privacy_modal()
 
 def generate_random_password(length=10):
-    chars = string.ascii_letters + string.digits + "!@#$%&*"
+    # Safe alphanumeric characters to prevent HTML/Email encoding errors
+    chars = string.ascii_letters + string.digits + "@#$%"
     return "".join(secrets.choice(chars) for _ in range(length))
 
 def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User"):
@@ -366,7 +367,7 @@ def login():
         with auth_tab1:
             with st.form("login_form"):
                 login_email = st.text_input("Email Address").strip()
-                login_pass = st.text_input("Password", type="password")
+                login_pass = st.text_input("Password", type="password").strip()
                 submit = st.form_submit_button("🔑 Login to Dashboard", use_container_width=True)
 
                 if submit:
