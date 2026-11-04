@@ -198,13 +198,12 @@ if hasattr(st, "dialog"):
         privacy_modal()
 
 def generate_random_password(length=10):
-    # Safe alphanumeric characters to prevent HTML/Email encoding errors
     chars = string.ascii_letters + string.digits + "@#$%"
     return "".join(secrets.choice(chars) for _ in range(length))
 
 def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User"):
     sender_email = st.secrets.get("EMAIL_SENDER", "lbidulsa.fo10@dswd.gov.ph")
-    sender_password = st.secrets.get("EMAIL_PASSWORD", "rkgqurmorpvfgktq")
+    sender_password = st.secrets.get("EMAIL_PASSWORD", "")
     system_link = "https://pdbbmpamanacdpd.streamlit.app/"
 
     try:
@@ -311,14 +310,19 @@ def extract_gps_from_image(image_file):
 # ---------------------------------------------------------
 # 1. CENTRALIZED SUPABASE CLOUD DATABASE INITIALIZATION
 # ---------------------------------------------------------
-DEFAULT_DB_URL = "postgresql+psycopg2://postgres.oxyvjstdncnnefbkilaa:5GLJZg5tWE28Wud9@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres"
+DEFAULT_DB_URL = ""
 
 @st.cache_resource
 def get_db_engine():
     try:
-        db_url = st.secrets.get("SUPABASE_URL", DEFAULT_DB_URL)
+        if "SUPABASE_URL" in st.secrets:
+            db_url = st.secrets["SUPABASE_URL"]
+        elif "postgres" in st.secrets and "url" in st.secrets["postgres"]:
+            db_url = st.secrets["postgres"]["url"]
+        else:
+            db_url = st.secrets.get("SUPABASE_URL", "")
     except Exception:
-        db_url = DEFAULT_DB_URL
+        db_url = "" 
     return create_engine(
         db_url,
         pool_pre_ping=True,
@@ -714,7 +718,6 @@ elif selected_view == "User Management Portal":
 
     st.markdown("##### 🔴 Live System User Login Activity & Audit Log:")
 
-    # FAST CACHED FETCH LOGS - ALL USERS (10s TTL)
     @st.cache_data(ttl=10)
     def fetch_users_fast():
         with engine.connect() as conn:
@@ -796,7 +799,6 @@ elif selected_view == "User Management Portal":
                 else:
                     st.error("Please fill in Full Name and Email Address.")
 
-    # RESET PASSWORD - ALL ACCOUNTS INCLUDED
     with col_u2:
         st.markdown("##### 🔑 Reset User Password (with Live Search)")
         user_search = st.text_input("🔍 Search User Name or Email:")
@@ -860,7 +862,6 @@ elif selected_view == "User Management Portal":
     st.markdown("---")
     st.subheader("📋 Registered Users Masterlist & Login Timestamps")
     
-    # MASTERLIST TABLE - ALL ACCOUNTS INCLUDED (INCLUSIVE OF CDPD ADMINS)
     try:
         df_users = pd.read_sql_query(
             text("SELECT id, full_name, email, user_role, require_change_pass, last_login FROM user_accounts ORDER BY id DESC"),
@@ -936,12 +937,10 @@ elif selected_view == "Geotagged_Photos":
                         st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug mag-upload og file ug isulat ang Sub-Project ID (o 'N/A')!")
                     else:
                         try:
-                            # 1. Backup file to local folder
                             file_path = os.path.join("uploaded_photos", uploaded_file.name)
                             with open(file_path, "wb") as f:
                                 f.write(uploaded_file.getbuffer())
 
-                            # 2. Convert file to permanent Base64 string for database storage
                             b64_img = convert_image_to_base64(uploaded_file)
 
                             with engine.begin() as conn:
@@ -1008,7 +1007,6 @@ elif selected_view == "Geotagged_Photos":
                         key=f"rot_{row.get('id', idx)}"
                     )
 
-                    # PRIORITIZE DISPLAYING BASE64 FROM SUPABASE DATABASE (PERMANENT)
                     if pd.notna(b64_val) and str(b64_val).startswith("data:image"):
                         st.image(b64_val, use_container_width=True, caption=f"📸 File: {p_file_name}")
                     elif p_path and os.path.exists(p_path):
@@ -1253,7 +1251,6 @@ elif selected_view == "SP_Profile":
             except Exception as ex:
                 st.error(f"❌ DATABASE ERROR: {ex}")
 
-        # 👑 SUPERUSER ACTION PANEL (EDIT / DELETE ROW)
         if current_role == "Superuser" and "id" in df_spi_filtered.columns:
             st.markdown("---")
             with st.expander("⚙️ Superuser Record Action Panel (Edit / Delete Row in SP Profile)"):
@@ -1358,7 +1355,6 @@ elif selected_view == "Data Extraction & Export":
         df_mod = load_db_table(mod_info["table"])
 
         if not df_mod.empty:
-            # Apply Date Filter if applicable
             if date_col_name and date_col_name in df_mod.columns and start_date and end_date:
                 try:
                     df_mod[date_col_name] = pd.to_datetime(df_mod[date_col_name], errors="coerce").dt.date
@@ -1375,7 +1371,6 @@ elif selected_view == "Data Extraction & Export":
             st.markdown("##### 💾 Download Report Options")
             btn_col1, btn_col2 = st.columns(2)
 
-            # Fallback Safe Excel Generator
             excel_buffer = io.BytesIO()
             has_excel = False
             try:
@@ -1404,7 +1399,6 @@ elif selected_view == "Data Extraction & Export":
                 else:
                     st.warning("⚠️ Excel engine not installed. Use CSV Download below.")
 
-            # CSV Download Generator
             csv_data = df_filtered_export.to_csv(index=False).encode("utf-8")
             with btn_col2:
                 st.download_button(
@@ -1744,7 +1738,6 @@ else:
             except Exception as ex:
                 st.error(f"❌ DATABASE ERROR: {ex}")
 
-        # 👑 SUPERUSER ACTION PANEL
         if current_role == "Superuser" and "id" in df_filtered.columns:
             st.markdown("---")
             with st.expander(f"⚙️ Superuser Record Action Panel (Edit / Delete Row in {selected_view})"):
