@@ -311,7 +311,13 @@ def get_db_engine():
         db_url = st.secrets.get("SUPABASE_URL", DEFAULT_DB_URL)
     except Exception:
         db_url = DEFAULT_DB_URL
-    return create_engine(db_url, pool_pre_ping=True)
+    return create_engine(
+        db_url,
+        pool_pre_ping=True,
+        pool_size=10,
+        max_overflow=20,
+        pool_recycle=300
+    )
 
 engine = get_db_engine()
 
@@ -689,11 +695,18 @@ elif selected_view == "User Management Portal":
 
     st.markdown("##### 🔴 Live System User Login Activity & Audit Log:")
 
-    # LIVE LOGS - ALL USERS
-    with engine.connect() as conn:
-        active_logs = conn.execute(
-            text("SELECT id, full_name, email, user_role, last_login FROM user_accounts ORDER BY last_login DESC NULLS LAST")
-        ).fetchall()
+    # FAST CACHED FETCH LOGS - ALL USERS (10s TTL)
+    @st.cache_data(ttl=10)
+    def fetch_users_fast():
+        with engine.connect() as conn:
+            return conn.execute(
+                text("SELECT id, full_name, email, user_role, last_login FROM user_accounts ORDER BY last_login DESC NULLS LAST LIMIT 50")
+            ).fetchall()
+
+    try:
+        active_logs = fetch_users_fast()
+    except Exception:
+        active_logs = []
 
     if active_logs:
         col_act1, col_act2 = st.columns([2, 1])
