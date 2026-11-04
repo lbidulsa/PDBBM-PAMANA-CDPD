@@ -559,12 +559,19 @@ st.sidebar.markdown(f"**Logged User:** `{st.session_state['user_name']}`")
 st.sidebar.markdown(f"**Email:** `{st.session_state['user_email']}`")
 st.sidebar.markdown(f"**System Role:** <span class='role-badge'>{st.session_state['user_role']}</span>", unsafe_allow_html=True)
 
-if st.sidebar.button("🚪 Logout", use_container_width=True):
-    st.session_state["logged_in"] = False
-    st.session_state["user_email"] = None
-    st.session_state["user_role"] = None
-    st.session_state["user_name"] = None
-    st.rerun()
+col_side_btn1, col_side_btn2 = st.sidebar.columns(2)
+with col_side_btn1:
+    if st.button("🔄 Refresh Data", use_container_width=True):
+        st.cache_data.clear()
+        st.toast("🔄 System cache refreshed successfully!", icon="✨")
+        st.rerun()
+with col_side_btn2:
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state["logged_in"] = False
+        st.session_state["user_email"] = None
+        st.session_state["user_role"] = None
+        st.session_state["user_name"] = None
+        st.rerun()
 
 with st.sidebar.expander("🔑 Change My Password"):
     with st.form("self_change_pass_pamana"):
