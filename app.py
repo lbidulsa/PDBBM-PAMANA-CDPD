@@ -339,10 +339,13 @@ def load_db_table(table_name):
     except Exception:
         return pd.DataFrame()
 
+# AUTO-SYNC SCHEMA FOR NEW MOV OTHER/S FIELDS
 try:
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE;"))
         conn.execute(text("ALTER TABLE geotagged_photos ADD COLUMN IF NOT EXISTS image_base64 TEXT;"))
+        conn.execute(text("ALTER TABLE ceac_barangay ADD COLUMN IF NOT EXISTS mov_other_files TEXT;"))
+        conn.execute(text("ALTER TABLE ceac_municipal ADD COLUMN IF NOT EXISTS mov_other_files TEXT;"))
 except Exception:
     pass
 
@@ -1454,11 +1457,11 @@ else:
                             st.error("⚠️ Exceeded maximum 10 files! Processing only the first 10 files.")
                             grs_files = grs_files[:10]
 
-                        att_saved, min_saved, lgu_saved = "N/A - GRS Intake", "N/A - GRS Intake", "N/A - GRS Intake"
+                        att_saved, min_saved, lgu_saved, other_saved = "N/A - GRS Intake", "N/A - GRS Intake", "N/A - GRS Intake", "N/A - GRS Intake"
                         grs_saved = save_multiple_files(grs_files)
                     else:
                         st.markdown("##### 📁 Upload MOVs (Separate Buttons for Municipal Activities)")
-                        mov_col1, mov_col2, mov_col3 = st.columns(3)
+                        mov_col1, mov_col2, mov_col3, mov_col4 = st.columns(4)
                         with mov_col1:
                             st.markdown("**1. Upload Attendance**")
                             att_file = st.file_uploader("Choose Attendance File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_att")
@@ -1474,6 +1477,11 @@ else:
                             lgu_min_file = st.file_uploader("Choose LGU Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_lgu_min")
                             lgu_saved = save_uploaded_file(lgu_min_file)
 
+                        with mov_col4:
+                            st.markdown("**4. Upload Other/s**")
+                            other_file = st.file_uploader("Choose Other File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cm_other_file")
+                            other_saved = save_uploaded_file(other_file)
+
                         grs_saved = ""
 
                     st.markdown("---")
@@ -1483,14 +1491,14 @@ else:
                             with engine.begin() as conn:
                                 conn.execute(
                                     text("""
-                                        INSERT INTO ceac_municipal (activity_name, region, province, municipality, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_minutes, mov_lgu_minutes, mov_grs_files, remarks)
-                                        VALUES (:act, :reg, :prov, :mun, :cyc, :dt, :denc, :enc, :mst, :est, :att, :min, :lgu, :grs, :rem)
+                                        INSERT INTO ceac_municipal (activity_name, region, province, municipality, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_minutes, mov_lgu_minutes, mov_grs_files, mov_other_files, remarks)
+                                        VALUES (:act, :reg, :prov, :mun, :cyc, :dt, :denc, :enc, :mst, :est, :att, :min, :lgu, :grs, :oth, :rem)
                                     """),
                                     {
                                         "act": selected_m_act, "reg": cm_region, "prov": cm_province, "mun": cm_municipality,
                                         "cyc": cm_cycle, "dt": cm_date, "denc": cm_date_enc, "enc": cm_encoder,
                                         "mst": cm_mov_st, "est": cm_enc_st, "att": att_saved, "min": min_saved,
-                                        "lgu": lgu_saved, "grs": grs_saved, "rem": cm_remarks,
+                                        "lgu": lgu_saved, "grs": grs_saved, "oth": other_saved, "rem": cm_remarks,
                                     },
                                 )
                             st.toast("✅ Municipal Activity record saved to Supabase!", icon="🎉")
@@ -1529,11 +1537,11 @@ else:
                             st.error("⚠️ Exceeded maximum 30 files! Processing only the first 30 files.")
                             cv_files = cv_files[:30]
 
-                        att_saved, brgy_min_saved, lgu_saved = "N/A - CV", "N/A - CV", "N/A - CV"
+                        att_saved, brgy_min_saved, min_saved, other_saved = "N/A - CV", "N/A - CV", "N/A - CV", "N/A - CV"
                         cv_saved = save_multiple_files(cv_files)
                     else:
                         st.markdown("##### 📁 Upload MOVs (Separate Buttons for Barangay Activities)")
-                        mov_col1, mov_col2, mov_col3 = st.columns(3)
+                        mov_col1, mov_col2, mov_col3, mov_col4 = st.columns(4)
                         with mov_col1:
                             st.markdown("**1. Upload Attendance**")
                             att_file = st.file_uploader("Choose Attendance File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_att")
@@ -1545,9 +1553,14 @@ else:
                             brgy_min_saved = save_uploaded_file(brgy_min_file)
 
                         with mov_col3:
-                            st.markdown("**3. Upload LGU Minutes of Activity**")
-                            lgu_min_file = st.file_uploader("Choose LGU Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_lgu_min")
-                            lgu_saved = save_uploaded_file(lgu_min_file)
+                            st.markdown("**3. Upload Minutes of Activity**")
+                            min_file = st.file_uploader("Choose Minutes File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_min")
+                            min_saved = save_uploaded_file(min_file)
+
+                        with mov_col4:
+                            st.markdown("**4. Upload Other/s**")
+                            other_file = st.file_uploader("Choose Other File/Image", type=["pdf", "png", "jpg", "jpeg", "docx"], key="cb_other_file")
+                            other_saved = save_uploaded_file(other_file)
 
                         cv_saved = ""
 
@@ -1561,14 +1574,14 @@ else:
                                 with engine.begin() as conn:
                                     conn.execute(
                                         text("""
-                                            INSERT INTO ceac_barangay (activity_name, region, province, municipality, barangay, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_brgy_minutes, mov_lgu_minutes, mov_cv_files, remarks)
-                                            VALUES (:act, :reg, :prov, :mun, :brgy, :cyc, :dt, :denc, :enc, :mst, :est, :att, :bmin, :lgu, :cv, :rem)
+                                            INSERT INTO ceac_barangay (activity_name, region, province, municipality, barangay, cycle_batch, activity_date, date_encoded, encoded_by, mov_status, encoded_status, mov_attendance, mov_brgy_minutes, mov_lgu_minutes, mov_cv_files, mov_other_files, remarks)
+                                            VALUES (:act, :reg, :prov, :mun, :brgy, :cyc, :dt, :denc, :enc, :mst, :est, :att, :bmin, :min, :cv, :oth, :rem)
                                         """),
                                         {
                                             "act": selected_b_act, "reg": cb_region, "prov": cb_province, "mun": cb_municipality,
                                             "brgy": cb_barangay.strip(), "cyc": cb_cycle, "dt": cb_date, "denc": cb_date_enc,
                                             "enc": cb_encoder, "mst": cb_mov_st, "est": cb_enc_st, "att": att_saved,
-                                            "bmin": brgy_min_saved, "lgu": lgu_saved, "cv": cv_saved, "rem": cb_remarks,
+                                            "bmin": brgy_min_saved, "min": min_saved, "cv": cv_saved, "oth": other_saved, "rem": cb_remarks,
                                         },
                                     )
                                 st.toast("✅ Barangay Activity record saved to Supabase!", icon="🎉")
