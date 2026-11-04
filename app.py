@@ -78,6 +78,13 @@ st.markdown(
     """
     <style>
     .stApp { background-color: #F4F6F9; }
+
+    /* Security Fix: Hide Streamlit Header, GitHub Repository Link Icon, and Main Menu */
+    header[data-testid="stHeader"] { visibility: hidden !important; display: none !important; }
+    #MainMenu { visibility: hidden !important; display: none !important; }
+    footer { visibility: hidden !important; display: none !important; }
+    .stAppDeployButton { display: none !important; }
+
     .main-title { font-size: 26px; font-weight: 800; color: #1F4E78; margin-bottom: 5px; }
     .sub-title { font-size: 14px; color: #5A6A85; margin-bottom: 20px; }
     
@@ -416,15 +423,15 @@ def login():
                     otp = "".join(random.choices(string.digits, k=6))
                     st.session_state["reset_otp"] = otp
                     st.session_state["reset_user_email"] = found_user[1]
+                    st.session_state["reset_otp_time"] = datetime.datetime.now()
 
                     target_name = found_user[0] if (found_user[0] and str(found_user[0]).lower() != "none") else found_user[1]
                     sent_ok, msg_res = send_credentials_email(found_user[1], target_name, otp, found_user[2])
                     if sent_ok:
                         st.toast("Verification code sent!", icon="📩")
-                        st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user[1]}!")
+                        st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user[1]}! (Valid for 5 minutes)")
                     else:
-                        st.warning(f"⚠️ Email dispatch status: {msg_res}")
-                        st.info(f"📬 [SYSTEM BACKUP RESET CODE]: Your Verification Reset Code is: **{otp}**")
+                        st.error(f"❌ Email dispatch failed: {msg_res}. Please check system logs or contact Admin.")
                 else:
                     st.error("No account associated with the provided email address!")
 
@@ -436,7 +443,18 @@ def login():
                 confirm_pass = st.text_input("Confirm New Password:", type="password")
 
                 if st.button("💾 Save New Password", use_container_width=True):
-                    if entered_otp == st.session_state["reset_otp"]:
+                    otp_created_at = st.session_state.get("reset_otp_time")
+                    is_expired = False
+                    if otp_created_at:
+                        time_diff = (datetime.datetime.now() - otp_created_at).total_seconds()
+                        if time_diff > 300: # 5 minutes TTL
+                            is_expired = True
+
+                    if is_expired:
+                        st.error("⏰ Verification Code has EXPIRED (5-minute limit reached). Please request a new code.")
+                        st.session_state["reset_otp"] = None
+                        st.session_state["reset_user_email"] = None
+                    elif entered_otp == st.session_state["reset_otp"]:
                         if new_pass and new_pass == confirm_pass:
                             u_email = st.session_state["reset_user_email"]
                             with engine.begin() as conn:
