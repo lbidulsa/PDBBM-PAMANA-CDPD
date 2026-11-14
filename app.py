@@ -216,7 +216,7 @@ def generate_random_password(length=10):
     chars = string.ascii_letters + string.digits + "@#$%"
     return "".join(secrets.choice(chars) for _ in range(length))
 
-def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User"):
+def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User", is_otp=False):
     sender_email = st.secrets.get("EMAIL_SENDER", "lbidulsa.fo10@dswd.gov.ph")
     sender_password = st.secrets.get("EMAIL_PASSWORD", "")
     system_link = "https://pdbbmpamanacdpd.streamlit.app/"
@@ -225,7 +225,25 @@ def send_credentials_email(recipient_email, recipient_name, temp_password, user_
         msg = MIMEMultipart("alternative")
         msg["From"] = f"DSWD FO X PAMANA CDPD System <{sender_email}>"
         msg["To"] = recipient_email
-        msg["Subject"] = "🔒 Official Account Credentials - PAMANA CDPD Portal"
+
+        if is_otp:
+            msg["Subject"] = "🔑 Password Reset OTP Code - PAMANA CDPD Portal"
+            intro_text = "We received a request to reset your password for the <b>PAMANA Peace & Development Management System</b>."
+            details_block = f"""
+                <p style="margin: 5px 0;"><b>Login Email:</b> <code style="font-size: 1.1em; color: #1F4E78;">{recipient_email}</code></p>
+                <p style="margin: 5px 0;"><b>6-Digit Reset OTP Code:</b> <code style="font-size: 1.4em; color: #C53030; font-weight: bold;">{temp_password}</code></p>
+                <p style="margin: 8px 0 0 0; color: #C53030; font-weight: bold;">⏳ Note: This OTP will expire in 3 minutes.</p>
+            """
+            security_notice = "<b>Security Notice:</b> Enter this 6-digit OTP in the Password Reset tab within <b>3 minutes</b>. If you did not request a password reset, please ignore this email."
+        else:
+            msg["Subject"] = "🔒 Official Account Credentials - PAMANA CDPD Portal"
+            intro_text = "Your official user account for the <b>PAMANA Peace & Development Management System</b> has been successfully configured."
+            details_block = f"""
+                <p style="margin: 5px 0;"><b>Login Email:</b> <code style="font-size: 1.1em; color: #1F4E78;">{recipient_email}</code></p>
+                <p style="margin: 5px 0;"><b>Assigned Role:</b> {user_role}</p>
+                <p style="margin: 5px 0;"><b>Temporary Password:</b> <code style="font-size: 1.2em; color: #C53030; font-weight: bold;">{temp_password}</code></p>
+            """
+            security_notice = "<b>Security Notice:</b> Please login to the PAMANA CDPD Portal and change your temporary password upon first system access."
 
         html_body = f"""
         <html>
@@ -234,12 +252,10 @@ def send_credentials_email(recipient_email, recipient_name, temp_password, user_
               <h2 style="color: #1F4E78; text-align: center;">🕊️ DSWD Field Office X - PAMANA CDPD System</h2>
               <hr style="border: 0; border-top: 1px solid #1F4E78;">
               <p>Dear <b>{recipient_name}</b>,</p>
-              <p>Your official user account for the <b>PAMANA Peace & Development Management System</b> has been successfully configured.</p>
+              <p>{intro_text}</p>
               
               <div style="background-color: #F4F6F9; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #1F4E78;">
-                <p style="margin: 5px 0;"><b>Login Email:</b> <code style="font-size: 1.1em; color: #1F4E78;">{recipient_email}</code></p>
-                <p style="margin: 5px 0;"><b>Assigned Role:</b> {user_role}</p>
-                <p style="margin: 5px 0;"><b>Temporary Password:</b> <code style="font-size: 1.2em; color: #C53030; font-weight: bold;">{temp_password}</code></p>
+                {details_block}
               </div>
 
               <div style="text-align: center; margin: 25px 0;">
@@ -252,7 +268,7 @@ def send_credentials_email(recipient_email, recipient_name, temp_password, user_
                 </p>
               </div>
 
-              <p><b>Security Notice:</b> Please login to the PAMANA CDPD Portal and change your temporary password upon first system access.</p>
+              <p>{security_notice}</p>
               <br>
               <p style="font-size: 0.85em; color: #6c757d; text-align: center;">
                 <i>This is an automated system dispatch. Please do not reply directly to this email.</i><br>
@@ -448,10 +464,10 @@ def login():
                     st.session_state["reset_otp_time"] = datetime.datetime.now()
 
                     target_name = found_user[0] if (found_user[0] and str(found_user[0]).lower() != "none") else found_user[1]
-                    sent_ok, msg_res = send_credentials_email(found_user[1], target_name, otp, found_user[2])
+                    sent_ok, msg_res = send_credentials_email(found_user[1], target_name, otp, found_user[2], is_otp=True)
                     if sent_ok:
                         st.toast("Verification code sent!", icon="📩")
-                        st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user[1]}! (Valid for 5 minutes)")
+                        st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user[1]}! (OTP will expire in 3 minutes)")
                     else:
                         st.error(f"❌ Email dispatch failed: {msg_res}. Please check system logs or contact Admin.")
                 else:
@@ -469,11 +485,11 @@ def login():
                     is_expired = False
                     if otp_created_at:
                         time_diff = (datetime.datetime.now() - otp_created_at).total_seconds()
-                        if time_diff > 300: # 5 minutes TTL
+                        if time_diff > 180: # 3 minutes TTL
                             is_expired = True
 
                     if is_expired:
-                        st.error("⏰ Verification Code has EXPIRED (5-minute limit reached). Please request a new code.")
+                        st.error("⏰ Verification Code has EXPIRED (3-minute limit reached). Please request a new code.")
                         st.session_state["reset_otp"] = None
                         st.session_state["reset_user_email"] = None
                     elif entered_otp == st.session_state["reset_otp"]:
