@@ -79,11 +79,26 @@ st.markdown(
     <style>
     .stApp { background-color: #F4F6F9; }
 
-    /* Security Fix: Hide Streamlit Header, GitHub Repository Link Icon, and Main Menu */
+    /* Security Fix: Hide Streamlit Header, GitHub Repository Link Icon, Main Menu & Cloud Viewer Badge */
     header[data-testid="stHeader"] { visibility: hidden !important; display: none !important; }
     #MainMenu { visibility: hidden !important; display: none !important; }
     footer { visibility: hidden !important; display: none !important; }
     .stAppDeployButton { display: none !important; }
+
+    /* Hide Streamlit Cloud Floating Crown / Profile Badge (Bottom-Right) */
+    [data-testid="stStatusWidget"] { visibility: hidden !important; display: none !important; }
+    .viewerBadge_container__1QSob,
+    .viewerBadge_link__1S137,
+    .viewerBadge_text__1JaDK,
+    div[class^="viewerBadge_"],
+    div[class^="_profileContainer_"],
+    div[class^="_terminalButton_"],
+    a[href*="streamlit.io/cloud"] {
+        visibility: hidden !important;
+        display: none !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+    }
 
     .main-title { font-size: 26px; font-weight: 800; color: #1F4E78; margin-bottom: 5px; }
     .sub-title { font-size: 14px; color: #5A6A85; margin-bottom: 20px; }
