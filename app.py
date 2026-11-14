@@ -74,6 +74,23 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ---------------------------------------------------------
+# SECURITY & CLEAN UI REDIRECT (FORCE ?embed=true)
+# ---------------------------------------------------------
+if st.query_params.get("embed") != "true":
+    st.markdown(
+        """
+        <meta http-equiv="refresh" content="0; url=https://pdbbmpamanacdpd.streamlit.app/?embed=true">
+        <script>
+            if (!window.location.search.includes("embed=true")) {
+                window.location.replace("https://pdbbmpamanacdpd.streamlit.app/?embed=true");
+            }
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.stop()
+
 st.markdown(
     """
     <style>
@@ -219,7 +236,7 @@ def generate_random_password(length=10):
 def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User"):
     sender_email = st.secrets.get("EMAIL_SENDER", "lbidulsa.fo10@dswd.gov.ph")
     sender_password = st.secrets.get("EMAIL_PASSWORD", "")
-    system_link = "https://pdbbmpamanacdpd.streamlit.app/"
+    system_link = "https://pdbbmpamanacdpd.streamlit.app/?embed=true"
 
     try:
         msg = MIMEMultipart("alternative")
