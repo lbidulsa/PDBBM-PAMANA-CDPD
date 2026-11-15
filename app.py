@@ -77,16 +77,17 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .stApp { background-color: #F4F6F9; }
+    /* Keep Streamlit Header & Toolbar visible for Sidebar Toggle (<<) and 3-Dots Theme Menu (⋮) */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+    }
 
-    /* Security Fix: Hide Streamlit Header, GitHub Repository Link Icon, Main Menu & Cloud Viewer Badge */
-    header[data-testid="stHeader"] { visibility: hidden !important; display: none !important; }
-    #MainMenu { visibility: hidden !important; display: none !important; }
-    footer { visibility: hidden !important; display: none !important; }
-    .stAppDeployButton { display: none !important; }
-
-    /* Hide Streamlit Cloud Floating Crown / Profile Badge (Bottom-Right) */
-    [data-testid="stStatusWidget"] { visibility: hidden !important; display: none !important; }
+    /* Hide Deploy Button, Toolbar Action Buttons (GitHub/Fork), Footer & Cloud Viewer Badge */
+    .stAppDeployButton,
+    [data-testid="stToolbarActions"],
+    [data-testid="stActionButtonIcon"],
+    footer,
+    [data-testid="stStatusWidget"],
     .viewerBadge_container__1QSob,
     .viewerBadge_link__1S137,
     .viewerBadge_text__1JaDK,
@@ -98,6 +99,14 @@ st.markdown(
         display: none !important;
         opacity: 0 !important;
         pointer-events: none !important;
+    }
+
+    /* Ensure Sidebar Collapse/Expand Button (<< / >) and 3-Dots MainMenu Stay Visible */
+    [data-testid="stSidebarCollapseButton"],
+    [data-testid="collapsedControl"],
+    #MainMenu {
+        visibility: visible !important;
+        display: flex !important;
     }
 
     .main-title { font-size: 26px; font-weight: 800; color: #1F4E78; margin-bottom: 5px; }
