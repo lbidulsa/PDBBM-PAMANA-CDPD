@@ -702,6 +702,8 @@ st.markdown("---")
 if selected_view == "Executive Dashboard":
     df_sp = load_db_table("sub_project_closeout_tracker")
     df_disb = load_db_table("disbursement")
+    df_ceac_muni = load_db_table("ceac_municipal")
+    df_ceac_brgy = load_db_table("ceac_barangay")
 
     col1, col2, col3, col4, col5 = st.columns(5)
     with col1:
@@ -743,6 +745,85 @@ if selected_view == "Executive Dashboard":
             st.plotly_chart(fig_gender, use_container_width=True)
         else:
             st.info("No beneficiary records found.")
+
+    st.markdown("---")
+    st.subheader("🏛️ CEAC Activities Overview (Municipal & Barangay)")
+
+    muni_cnt = len(df_ceac_muni) if not df_ceac_muni.empty else 0
+    brgy_cnt = len(df_ceac_brgy) if not df_ceac_brgy.empty else 0
+    tot_ceac = muni_cnt + brgy_cnt
+
+    mov_done_cnt = 0
+    if not df_ceac_muni.empty and "mov_status" in df_ceac_muni.columns:
+        mov_done_cnt += int((df_ceac_muni["mov_status"].astype(str).str.upper() == "COMPLETED & UPLOADED").sum())
+    if not df_ceac_brgy.empty and "mov_status" in df_ceac_brgy.columns:
+        mov_done_cnt += int((df_ceac_brgy["mov_status"].astype(str).str.upper() == "COMPLETED & UPLOADED").sum())
+
+    cc1, cc2, cc3, cc4 = st.columns(4)
+    with cc1:
+        st.metric("Municipal CEAC Activities", muni_cnt)
+    with cc2:
+        st.metric("Barangay CEAC Activities", brgy_cnt)
+    with cc3:
+        st.metric("Total CEAC Logged", tot_ceac)
+    with cc4:
+        st.metric("MOV Completed & Uploaded", mov_done_cnt)
+
+    cm_col1, cm_col2 = st.columns(2)
+    with cm_col1:
+        st.markdown("##### 📍 CEAC Barangay Activities by Type")
+        if not df_ceac_brgy.empty and "activity_name" in df_ceac_brgy.columns:
+            brgy_counts = df_ceac_brgy["activity_name"].fillna("Unspecified").value_counts().reset_index()
+            brgy_counts.columns = ["Activity", "Count"]
+            fig_cb = px.bar(
+                brgy_counts, x="Count", y="Activity", orientation="h", text_auto=True,
+                color="Activity", color_discrete_sequence=px.colors.qualitative.Bold
+            )
+            fig_cb.update_layout(showlegend=False, yaxis={"categoryorder": "total ascending"})
+            st.plotly_chart(fig_cb, use_container_width=True)
+        else:
+            st.info("No CEAC Barangay records found.")
+
+    with cm_col2:
+        st.markdown("##### 🏢 CEAC Municipal Activities by Type")
+        if not df_ceac_muni.empty and "activity_name" in df_ceac_muni.columns:
+            muni_counts = df_ceac_muni["activity_name"].fillna("Unspecified").value_counts().reset_index()
+            muni_counts.columns = ["Activity", "Count"]
+            fig_cm = px.bar(
+                muni_counts, x="Count", y="Activity", orientation="h", text_auto=True,
+                color="Activity", color_discrete_sequence=px.colors.qualitative.Safe
+            )
+            fig_cm.update_layout(showlegend=False, yaxis={"categoryorder": "total ascending"})
+            st.plotly_chart(fig_cm, use_container_width=True)
+        else:
+            st.info("No CEAC Municipal records found.")
+
+    recent_frames = []
+    if not df_ceac_brgy.empty:
+        tmp_b = df_ceac_brgy.copy()
+        tmp_b["Level"] = "Barangay"
+        if "barangay" in tmp_b.columns and "municipality" in tmp_b.columns:
+            tmp_b["Location"] = tmp_b["barangay"].fillna("") + ", " + tmp_b["municipality"].fillna("")
+        elif "municipality" in tmp_b.columns:
+            tmp_b["Location"] = tmp_b["municipality"].fillna("")
+        else:
+            tmp_b["Location"] = ""
+        recent_frames.append(tmp_b)
+
+    if not df_ceac_muni.empty:
+        tmp_m = df_ceac_muni.copy()
+        tmp_m["Level"] = "Municipal"
+        tmp_m["Location"] = tmp_m["municipality"].fillna("") if "municipality" in tmp_m.columns else ""
+        recent_frames.append(tmp_m)
+
+    if recent_frames:
+        df_ceac_all = pd.concat(recent_frames, ignore_index=True)
+        sort_col = "date_encoded" if "date_encoded" in df_ceac_all.columns else ("id" if "id" in df_ceac_all.columns else None)
+        if sort_col:
+            df_ceac_all = df_ceac_all.sort_values(by=sort_col, ascending=False)
+        keep_cols = [c for c in ["Level", "activity_name", "Location", "cycle_batch", "activity_date", "mov_status", "encoded_status", "encoded_by"] if c in df_ceac_all.columns]
+        st.markdown("##### 🕒 Recent CEAC Activities Feed")
+        st.dataframe(df_ceac_all[keep_cols].head(10), use_container_width=True, hide_index=True)
 
 # ---------------------------------------------------------
 # 6. USER MANAGEMENT PORTAL (SUPERUSER ONLY - ALL ACCOUNTS INCLUDED)
