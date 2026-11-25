@@ -3,6 +3,7 @@ import datetime
 import io
 import os
 import random
+import re
 import secrets
 import smtplib
 import string
@@ -68,6 +69,18 @@ def convert_image_to_base64(uploaded_file):
         base64_encoded = base64.b64encode(file_bytes).decode('utf-8')
         return f"data:{uploaded_file.type};base64,{base64_encoded}"
     return ""
+
+# ---------------------------------------------------------
+# TEXT NORMALIZATION HELPER FOR CHART LABELS
+# ---------------------------------------------------------
+def clean_label_series(series, fallback="Unspecified"):
+    """Normalizes spacing, hyphens, and whitespace so near-duplicate labels merge cleanly."""
+    cleaned = (
+        series.fillna(fallback)
+        .astype(str)
+        .apply(lambda s: re.sub(r"\s*-\s*", " - ", re.sub(r"\s+", " ", s)).strip())
+    )
+    return cleaned.replace("", fallback)
 
 # ---------------------------------------------------------
 # EXECUTIVE PLOTLY STYLING HELPER (PIE CHARTS + PAMANA THEME)
@@ -872,7 +885,8 @@ if selected_view == "Executive Dashboard":
     with c1:
         st.subheader("📊 Sub-Project Closeout Status")
         if not df_sp.empty and "overall_closeout_status" in df_sp.columns:
-            sp_status_df = df_sp["overall_closeout_status"].fillna("Unspecified").value_counts().reset_index()
+            sp_status_series = clean_label_series(df_sp["overall_closeout_status"], "Unspecified")
+            sp_status_df = sp_status_series.value_counts().reset_index()
             sp_status_df.columns = ["Status", "Count"]
             fig_status = build_pie_chart(sp_status_df, names_col="Status", values_col="Count", height=340)
             st.plotly_chart(fig_status, use_container_width=True)
@@ -905,9 +919,9 @@ if selected_view == "Executive Dashboard":
 
     mov_done_cnt = 0
     if not df_ceac_muni.empty and "mov_status" in df_ceac_muni.columns:
-        mov_done_cnt += int((df_ceac_muni["mov_status"].astype(str).str.upper() == "COMPLETED & UPLOADED").sum())
+        mov_done_cnt += int((df_ceac_muni["mov_status"].astype(str).str.strip().str.upper() == "COMPLETED & UPLOADED").sum())
     if not df_ceac_brgy.empty and "mov_status" in df_ceac_brgy.columns:
-        mov_done_cnt += int((df_ceac_brgy["mov_status"].astype(str).str.upper() == "COMPLETED & UPLOADED").sum())
+        mov_done_cnt += int((df_ceac_brgy["mov_status"].astype(str).str.strip().str.upper() == "COMPLETED & UPLOADED").sum())
 
     cc1, cc2, cc3, cc4 = st.columns(4)
     with cc1:
@@ -923,7 +937,8 @@ if selected_view == "Executive Dashboard":
     with cm_col1:
         st.markdown("##### 📍 CEAC Barangay Activities by Type")
         if not df_ceac_brgy.empty and "activity_name" in df_ceac_brgy.columns:
-            brgy_counts = df_ceac_brgy["activity_name"].fillna("Unspecified").value_counts().reset_index()
+            brgy_act_series = clean_label_series(df_ceac_brgy["activity_name"], "Unspecified")
+            brgy_counts = brgy_act_series.value_counts().reset_index()
             brgy_counts.columns = ["Activity", "Count"]
             fig_cb = build_pie_chart(brgy_counts, names_col="Activity", values_col="Count", height=320)
             st.plotly_chart(fig_cb, use_container_width=True)
@@ -933,34 +948,40 @@ if selected_view == "Executive Dashboard":
     with cm_col2:
         st.markdown("##### 🏢 CEAC Municipal Activities by Type")
         if not df_ceac_muni.empty and "activity_name" in df_ceac_muni.columns:
-            muni_counts = df_ceac_muni["activity_name"].fillna("Unspecified").value_counts().reset_index()
+            muni_act_series = clean_label_series(df_ceac_muni["activity_name"], "Unspecified")
+            muni_counts = muni_act_series.value_counts().reset_index()
             muni_counts.columns = ["Activity", "Count"]
             fig_cm = build_pie_chart(muni_counts, names_col="Activity", values_col="Count", height=320)
             st.plotly_chart(fig_cm, use_container_width=True)
         else:
             st.info("No CEAC Municipal records found.")
 
-    # Pie Chart Breakdown for CEAC Activities by Level & Cycle
+    # Pie Chart Breakdown for CEAC Activities by Level & Cycle (Normalized Labels)
     anim_frames = []
     if not df_ceac_brgy.empty and "activity_name" in df_ceac_brgy.columns:
-        ab = df_ceac_brgy.copy()
-        ab["Level"] = "Barangay"
-        ab["Cycle"] = ab["cycle_batch"].fillna("Unspecified Cycle") if "cycle_batch" in ab.columns else "All Cycles"
-        anim_frames.append(ab[["Level", "Cycle", "activity_name"]])
+        ab = pd.DataFrame({
+            "Level": "Barangay",
+            "Cycle": clean_label_series(df_ceac_brgy["cycle_batch"], "Unspecified Cycle") if "cycle_batch" in df_ceac_brgy.columns else "All Cycles",
+            "activity_name": clean_label_series(df_ceac_brgy["activity_name"], "Unspecified"),
+        })
+        anim_frames.append(ab)
     if not df_ceac_muni.empty and "activity_name" in df_ceac_muni.columns:
-        am = df_ceac_muni.copy()
-        am["Level"] = "Municipal"
-        am["Cycle"] = am["cycle_batch"].fillna("Unspecified Cycle") if "cycle_batch" in am.columns else "All Cycles"
-        anim_frames.append(am[["Level", "Cycle", "activity_name"]])
+        am = pd.DataFrame({
+            "Level": "Municipal",
+            "Cycle": clean_label_series(df_ceac_muni["cycle_batch"], "Unspecified Cycle") if "cycle_batch" in df_ceac_muni.columns else "All Cycles",
+            "activity_name": clean_label_series(df_ceac_muni["activity_name"], "Unspecified"),
+        })
+        anim_frames.append(am)
 
     if anim_frames:
         df_anim_src = pd.concat(anim_frames, ignore_index=True)
         df_anim_grp = (
-            df_anim_src.groupby(["Cycle", "Level", "activity_name"])
+            df_anim_src.groupby(["Cycle", "Level", "activity_name"], as_index=False)
             .size()
-            .reset_index(name="Activities")
+            .rename(columns={"size": "Activities"})
         )
         if not df_anim_grp.empty:
+            df_anim_grp = df_anim_grp.sort_values(by="Activities", ascending=False)
             st.markdown("##### 🥧 CEAC Activity Share by Cycle & Level")
             df_anim_grp["Label"] = df_anim_grp["activity_name"] + " (" + df_anim_grp["Level"] + " • " + df_anim_grp["Cycle"] + ")"
             fig_anim = build_pie_chart(df_anim_grp, names_col="Label", values_col="Activities", height=340)
