@@ -902,7 +902,7 @@ def parse_mov_filenames(raw_val):
         return []
     return [part.strip() for part in txt.split(",") if part.strip()]
 
-def render_single_mov_file(filename, key_prefix):
+def render_single_mov_file(filename, key_prefix, record_row=None, module_label="", col_name=""):
     file_path = os.path.join("uploaded_movs", filename)
     st.markdown(f"**📄 File:** `{filename}`")
 
@@ -947,9 +947,45 @@ def render_single_mov_file(filename, key_prefix):
             st.info(f"ℹ️ Preview for `{ext}` is not inline; use the Download button above to open `{filename}`.")
     else:
         st.warning(
-            f"⚠️ File `{filename}` is not available on the current server disk or database vault "
-            f"(if uploaded prior to the vault update and before a container restart, the original uploader can re-attach it)."
+            f"⚠️ **Not corrupted — record is intact**, but binary file `{filename}` is not on the current server disk or database vault "
+            f"(this happens for files uploaded prior to the vault update before a container restart)."
         )
+
+        if record_row is not None and col_name and can_edit_record_row(current_role, module_label, record_row) and "id" in record_row:
+            with st.expander(f"📤 Re-Attach File for `{filename}` (Saves to Disk & Database Vault)"):
+                re_file = st.file_uploader(
+                    f"Choose file to restore `{filename}` (or attach replacement):",
+                    type=["pdf", "png", "jpg", "jpeg", "docx"],
+                    key=f"reattach_up_{key_prefix}_{filename}",
+                )
+                if re_file is not None and st.button(f"💾 Save File to Vault & Update Record", key=f"reattach_btn_{key_prefix}_{filename}", use_container_width=True):
+                    try:
+                        r_bytes = re_file.getvalue()
+                        disk_p = os.path.join("uploaded_movs", re_file.name)
+                        with open(disk_p, "wb") as f:
+                            f.write(r_bytes)
+                        persist_mov_to_vault(re_file.name, r_bytes, getattr(re_file, "type", ""))
+
+                        raw_curr = str(record_row.get(col_name) or "")
+                        parts = [p.strip() for p in raw_curr.split(",") if p.strip()]
+                        if filename in parts and re_file.name != filename:
+                            parts = [re_file.name if p == filename else p for p in parts]
+                        elif re_file.name not in parts:
+                            parts.append(re_file.name)
+                        new_col_val = ", ".join(parts)
+
+                        tbl_low = module_label.lower()
+                        rec_id = int(record_row["id"])
+                        with engine.begin() as conn:
+                            conn.execute(
+                                text(f"UPDATE {tbl_low} SET {col_name} = :val WHERE id = :rid"),
+                                {"val": new_col_val, "rid": rec_id},
+                            )
+                        st.toast(f"✅ `{re_file.name}` saved to database vault!", icon="☁️")
+                        st.success(f"File `{re_file.name}` restored to vault and record updated!")
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"❌ Restore error: {ex}")
 
 def render_mov_inspector(df_rows, module_label):
     """Displays MOVs tagsa-tagsa for authorized users (Superuser, MDM, or record encoder)."""
@@ -1007,7 +1043,13 @@ def render_mov_inspector(df_rows, module_label):
     chosen_idx = st.selectbox("Choose MOV File to View (Tagas-tagsa):", range(len(all_files)), format_func=lambda i: file_choice_labels[i], key=f"mov_file_pick_{module_label}_{sel_rid}")
     chosen_slot, chosen_col, chosen_fname = all_files[chosen_idx]
     st.caption(f"Category: **{chosen_slot}** (`{chosen_col}`)")
-    render_single_mov_file(chosen_fname, key_prefix=f"insp_{module_label}_{sel_rid}_{chosen_idx}")
+    render_single_mov_file(
+        chosen_fname,
+        key_prefix=f"insp_{module_label}_{sel_rid}_{chosen_idx}",
+        record_row=sel_row,
+        module_label=module_label,
+        col_name=chosen_col,
+    )
 
 def serialize_record_payload(row_dict):
     clean = {}
