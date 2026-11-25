@@ -527,7 +527,7 @@ def load_db_table(table_name):
     except Exception:
         return pd.DataFrame()
 
-# AUTO-SYNC SCHEMA FOR NEW MOV OTHER/S, TEMP PASS EXPIRY, DELETE REQUESTS & 30-DAY ARCHIVE
+# AUTO-SYNC SCHEMA FOR NEW MOV OTHER/S, TEMP PASS EXPIRY, DELETE REQUESTS, 30-DAY ARCHIVE & MOV VAULT
 try:
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE;"))
@@ -535,6 +535,15 @@ try:
         conn.execute(text("ALTER TABLE geotagged_photos ADD COLUMN IF NOT EXISTS image_base64 TEXT;"))
         conn.execute(text("ALTER TABLE ceac_barangay ADD COLUMN IF NOT EXISTS mov_other_files TEXT;"))
         conn.execute(text("ALTER TABLE ceac_municipal ADD COLUMN IF NOT EXISTS mov_other_files TEXT;"))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS mov_file_vault (
+                id SERIAL PRIMARY KEY,
+                filename VARCHAR(512) UNIQUE NOT NULL,
+                mime_type VARCHAR(150),
+                file_base64 TEXT NOT NULL,
+                uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
         conn.execute(text("""
             CREATE TABLE IF NOT EXISTS deletion_requests (
                 id SERIAL PRIMARY KEY,
@@ -816,15 +825,60 @@ def can_edit_record_row(role, module, record_row):
     if is_record_owner(record_row):
         return True
     if role == "Admin":
-        # Admin can edit own entry; if record has no owner tagged, allow module edit
         return get_record_owner(record_row) == ""
     return can_edit_module(role, module)
 
+def persist_mov_to_vault(filename, file_bytes, mime_type=""):
+    """Stores a Base64 copy of an MOV file in Supabase so it survives container restarts."""
+    if not filename or not file_bytes:
+        return
+    try:
+        b64_data = base64.b64encode(file_bytes).decode("utf-8")
+        with engine.begin() as conn:
+            conn.execute(
+                text("""
+                    INSERT INTO mov_file_vault (filename, mime_type, file_base64, uploaded_at)
+                    VALUES (:fn, :mt, :b64, CURRENT_TIMESTAMP)
+                    ON CONFLICT (filename) DO UPDATE
+                    SET mime_type = EXCLUDED.mime_type,
+                        file_base64 = EXCLUDED.file_base64,
+                        uploaded_at = CURRENT_TIMESTAMP
+                """),
+                {"fn": filename, "mt": mime_type or "", "b64": b64_data},
+            )
+    except Exception:
+        pass
+
+def get_mov_bytes_from_vault(filename):
+    """Retrieves raw file bytes from mov_file_vault if available, and restores to disk."""
+    if not filename:
+        return None
+    try:
+        with engine.connect() as conn:
+            row = conn.execute(
+                text("SELECT file_base64 FROM mov_file_vault WHERE filename = :fn ORDER BY id DESC LIMIT 1"),
+                {"fn": filename},
+            ).fetchone()
+        if row and row[0]:
+            raw_bytes = base64.b64decode(row[0])
+            try:
+                disk_path = os.path.join("uploaded_movs", filename)
+                with open(disk_path, "wb") as f:
+                    f.write(raw_bytes)
+            except Exception:
+                pass
+            return raw_bytes
+    except Exception:
+        pass
+    return None
+
 def save_uploaded_file(file_obj):
     if file_obj is not None:
+        file_bytes = file_obj.getvalue()
         file_path = os.path.join("uploaded_movs", file_obj.name)
         with open(file_path, "wb") as f:
-            f.write(file_obj.getbuffer())
+            f.write(file_bytes)
+        persist_mov_to_vault(file_obj.name, file_bytes, getattr(file_obj, "type", ""))
         return file_obj.name
     return ""
 
@@ -832,9 +886,11 @@ def save_multiple_files(files_list):
     saved_names = []
     if files_list:
         for file_obj in files_list:
+            file_bytes = file_obj.getvalue()
             file_path = os.path.join("uploaded_movs", file_obj.name)
             with open(file_path, "wb") as f:
-                f.write(file_obj.getbuffer())
+                f.write(file_bytes)
+            persist_mov_to_vault(file_obj.name, file_bytes, getattr(file_obj, "type", ""))
             saved_names.append(file_obj.name)
     return ", ".join(saved_names)
 
@@ -849,9 +905,21 @@ def parse_mov_filenames(raw_val):
 def render_single_mov_file(filename, key_prefix):
     file_path = os.path.join("uploaded_movs", filename)
     st.markdown(f"**📄 File:** `{filename}`")
+
+    file_bytes = None
+    from_vault = False
+
     if os.path.exists(file_path) and os.path.isfile(file_path):
         with open(file_path, "rb") as f:
             file_bytes = f.read()
+    else:
+        file_bytes = get_mov_bytes_from_vault(filename)
+        if file_bytes is not None:
+            from_vault = True
+
+    if file_bytes is not None:
+        if from_vault:
+            st.info("☁️ Loaded from persistent database vault after server restart.")
 
         ext = os.path.splitext(filename)[1].lower()
         c_dl, c_info = st.columns([1, 2])
@@ -878,7 +946,10 @@ def render_single_mov_file(filename, key_prefix):
         else:
             st.info(f"ℹ️ Preview for `{ext}` is not inline; use the Download button above to open `{filename}`.")
     else:
-        st.warning(f"⚠️ File `{filename}` not found in server `uploaded_movs/` folder (may have been uploaded prior to container restart).")
+        st.warning(
+            f"⚠️ File `{filename}` is not available on the current server disk or database vault "
+            f"(if uploaded prior to the vault update and before a container restart, the original uploader can re-attach it)."
+        )
 
 def render_mov_inspector(df_rows, module_label):
     """Displays MOVs tagsa-tagsa for authorized users (Superuser, MDM, or record encoder)."""
