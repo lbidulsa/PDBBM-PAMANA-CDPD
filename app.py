@@ -30,6 +30,10 @@ try:
 except ImportError:
     HAS_GEO_EVAL = False
 
+# Security TTL Constants
+OTP_EXPIRY_SECONDS = 120          # 2 minutes for Password Reset OTP
+TEMP_PASS_EXPIRY_HOURS = 24       # 24 hours for Temporary Password
+
 # ---------------------------------------------------------
 # 🇵🇭 TIMEZONE HELPER FUNCTION FOR PHILIPPINE STANDARD TIME
 # ---------------------------------------------------------
@@ -66,7 +70,7 @@ def convert_image_to_base64(uploaded_file):
     return ""
 
 # ---------------------------------------------------------
-# EXECUTIVE PLOTLY STYLING HELPER (SLIM BAR DIAGRAM + PAMANA THEME)
+# EXECUTIVE PLOTLY STYLING HELPER (PIE CHARTS + PAMANA THEME)
 # ---------------------------------------------------------
 PAMANA_PALETTE = [
     "#0F2A4A", "#0284C7", "#0EA5E9", "#1D4ED8",
@@ -103,72 +107,36 @@ def style_vibrant_fig(fig, title_text="", height=350, is_bar=False):
         )
     return fig
 
-def build_bar_diagram(
-    df_plot,
-    x_col,
-    y_col,
-    orientation="v",
-    color_col=None,
-    color_map=None,
-    facet_col=None,
-    bar_width=0.22,
-    height=330,
-    text_fmt=",.0f",
-    sort_ascending=True,
-):
-    """Builds a clean, slim bar diagram (avoiding bulky square/rectangular blocks)."""
-    fig = px.bar(
+def build_pie_chart(df_plot, names_col, values_col, height=330, color_map=None, hole=0.0):
+    """Builds a clean pie chart with clear percentage labels and side legend."""
+    fig = px.pie(
         df_plot,
-        x=x_col,
-        y=y_col,
-        color=color_col,
+        names=names_col,
+        values=values_col,
+        hole=hole,
+        color=names_col,
         color_discrete_map=color_map,
         color_discrete_sequence=PAMANA_PALETTE,
-        facet_col=facet_col,
-        orientation=orientation,
-        barmode="group",
-        text_auto=text_fmt,
     )
     fig.update_traces(
-        width=bar_width,
-        textposition="outside",
-        textfont=dict(size=12, color="#0F2A4A", family="Arial, sans-serif"),
-        cliponaxis=False,
+        textposition="inside",
+        textinfo="percent",
+        textfont=dict(size=13, color="#FFFFFF", family="Arial, sans-serif"),
+        marker=dict(line=dict(color="#FFFFFF", width=1.8)),
+        sort=False,
     )
-
-    val_col = x_col if orientation == "h" else y_col
-    max_val = 0
-    if not df_plot.empty and val_col in df_plot.columns:
-        numeric_vals = pd.to_numeric(df_plot[val_col], errors="coerce").dropna()
-        if not numeric_vals.empty:
-            max_val = float(numeric_vals.max())
-    upper_bound = max(max_val * 1.25, 1.0)
-
-    if orientation == "h":
-        fig.update_xaxes(
-            range=[0, upper_bound],
-            showgrid=True,
-            gridcolor="rgba(148,163,184,0.24)",
-            zeroline=False,
-        )
-        fig.update_yaxes(
-            showgrid=False,
-            zeroline=False,
-            categoryorder="total ascending" if sort_ascending else "total descending",
-        )
-    else:
-        fig.update_yaxes(
-            range=[0, upper_bound],
-            showgrid=True,
-            gridcolor="rgba(148,163,184,0.24)",
-            zeroline=False,
-        )
-        fig.update_xaxes(
-            showgrid=False,
-            zeroline=False,
-        )
-
-    return style_vibrant_fig(fig, height=height, is_bar=True)
+    fig.update_layout(
+        showlegend=True,
+        legend=dict(
+            orientation="v",
+            yanchor="middle",
+            y=0.5,
+            xanchor="left",
+            x=1.02,
+            font=dict(size=12, color="#0F2A4A"),
+        ),
+    )
+    return style_vibrant_fig(fig, height=height)
 
 # ---------------------------------------------------------
 # PAGE CONFIGURATION & CUSTOM STYLING
@@ -373,6 +341,22 @@ def generate_random_password(length=10):
     chars = string.ascii_letters + string.digits + "@#$%"
     return "".join(secrets.choice(chars) for _ in range(length))
 
+def is_temp_pass_expired(req_change_flag, temp_created_val):
+    """Checks if a temporary password (require_change_pass == 1) is past TEMP_PASS_EXPIRY_HOURS."""
+    if not req_change_flag:
+        return False
+    if temp_created_val is None or pd.isna(temp_created_val):
+        return False
+    try:
+        dt_val = pd.to_datetime(temp_created_val)
+        if dt_val.tzinfo is None:
+            dt_val = dt_val.replace(tzinfo=datetime.timezone.utc)
+        now_utc = datetime.datetime.now(datetime.timezone.utc)
+        elapsed_hours = (now_utc - dt_val).total_seconds() / 3600.0
+        return elapsed_hours > TEMP_PASS_EXPIRY_HOURS
+    except Exception:
+        return False
+
 def send_credentials_email(recipient_email, recipient_name, temp_password, user_role="User", is_otp=False):
     sender_email = st.secrets.get("EMAIL_SENDER", "lbidulsa.fo10@dswd.gov.ph")
     sender_password = st.secrets.get("EMAIL_PASSWORD", "")
@@ -389,9 +373,9 @@ def send_credentials_email(recipient_email, recipient_name, temp_password, user_
             details_block = f"""
                 <p style="margin: 5px 0;"><b>Login Email:</b> <code style="font-size: 1.1em; color: #1F4E78;">{recipient_email}</code></p>
                 <p style="margin: 5px 0;"><b>6-Digit Reset OTP Code:</b> <code style="font-size: 1.4em; color: #C53030; font-weight: bold;">{temp_password}</code></p>
-                <p style="margin: 8px 0 0 0; color: #C53030; font-weight: bold;">⏳ Note: This OTP will expire in 3 minutes.</p>
+                <p style="margin: 8px 0 0 0; color: #C53030; font-weight: bold;">⏳ Note: This OTP will expire in 2 minutes.</p>
             """
-            security_notice = "<b>Security Notice:</b> Enter this 6-digit OTP in the Password Reset tab within <b>3 minutes</b>. If you did not request a password reset, please ignore this email."
+            security_notice = "<b>Security Notice:</b> Your OTP will expire in <b>2 minutes</b>. Enter this 6-digit OTP in the Password Reset tab before it expires. If you did not request a password reset, please ignore this email."
         else:
             msg["Subject"] = "🔒 Official Account Credentials - PAMANA CDPD Portal"
             intro_text = "Your official user account for the <b>PAMANA Peace & Development Management System</b> has been successfully configured."
@@ -399,8 +383,9 @@ def send_credentials_email(recipient_email, recipient_name, temp_password, user_
                 <p style="margin: 5px 0;"><b>Login Email:</b> <code style="font-size: 1.1em; color: #1F4E78;">{recipient_email}</code></p>
                 <p style="margin: 5px 0;"><b>Assigned Role:</b> {user_role}</p>
                 <p style="margin: 5px 0;"><b>Temporary Password:</b> <code style="font-size: 1.2em; color: #C53030; font-weight: bold;">{temp_password}</code></p>
+                <p style="margin: 8px 0 0 0; color: #C53030; font-weight: bold;">⏳ Note: This temporary password will expire in 24 hours.</p>
             """
-            security_notice = "<b>Security Notice:</b> Please login to the PAMANA CDPD Portal and change your temporary password upon first system access."
+            security_notice = "<b>Security Notice:</b> Your temporary password will expire in <b>24 hours</b>. Please login to the PAMANA CDPD Portal and change your temporary password before it expires."
 
         html_body = f"""
         <html>
@@ -527,10 +512,11 @@ def load_db_table(table_name):
     except Exception:
         return pd.DataFrame()
 
-# AUTO-SYNC SCHEMA FOR NEW MOV OTHER/S FIELDS
+# AUTO-SYNC SCHEMA FOR NEW MOV OTHER/S & TEMP PASS EXPIRY FIELDS
 try:
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE;"))
+        conn.execute(text("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS temp_pass_created_at TIMESTAMP WITH TIME ZONE;"))
         conn.execute(text("ALTER TABLE geotagged_photos ADD COLUMN IF NOT EXISTS image_base64 TEXT;"))
         conn.execute(text("ALTER TABLE ceac_barangay ADD COLUMN IF NOT EXISTS mov_other_files TEXT;"))
         conn.execute(text("ALTER TABLE ceac_municipal ADD COLUMN IF NOT EXISTS mov_other_files TEXT;"))
@@ -575,31 +561,34 @@ def login():
                 if submit:
                     with engine.connect() as conn:
                         res = conn.execute(
-                            text("SELECT id, full_name, email, password, user_role, require_change_pass FROM user_accounts WHERE lower(trim(email)) = lower(trim(:email)) AND trim(password) = trim(:password)"),
+                            text("SELECT id, full_name, email, password, user_role, require_change_pass, temp_pass_created_at FROM user_accounts WHERE lower(trim(email)) = lower(trim(:email)) AND trim(password) = trim(:password)"),
                             {"email": login_email, "password": login_pass},
                         ).fetchone()
 
                     if res:
-                        display_name = (
-                            res[1] if (res[1] and str(res[1]).strip() != "" and str(res[1]).lower() != "none") else res[2]
-                        )
+                        if is_temp_pass_expired(bool(res[5]), res[6]):
+                            st.error("⏰ Temporary password has EXPIRED (24-hour limit reached). Please use Forgot / Reset Password or contact Admin.")
+                        else:
+                            display_name = (
+                                res[1] if (res[1] and str(res[1]).strip() != "" and str(res[1]).lower() != "none") else res[2]
+                            )
 
-                        st.session_state["logged_in"] = True
-                        st.session_state["user_email"] = res[2]
-                        st.session_state["user_role"] = res[4]
-                        st.session_state["user_name"] = display_name
-                        st.session_state["must_change_pass"] = bool(res[5])
+                            st.session_state["logged_in"] = True
+                            st.session_state["user_email"] = res[2]
+                            st.session_state["user_role"] = res[4]
+                            st.session_state["user_name"] = display_name
+                            st.session_state["must_change_pass"] = bool(res[5])
 
-                        try:
-                            ph_now = get_ph_time()
-                            with engine.begin() as conn_up:
-                                conn_up.execute(text("UPDATE user_accounts SET last_login = :ll WHERE id = :uid"), {"ll": ph_now, "uid": res[0]})
-                        except Exception:
-                            pass
+                            try:
+                                ph_now = get_ph_time()
+                                with engine.begin() as conn_up:
+                                    conn_up.execute(text("UPDATE user_accounts SET last_login = :ll WHERE id = :uid"), {"ll": ph_now, "uid": res[0]})
+                            except Exception:
+                                pass
 
-                        st.toast(f"Welcome back, {display_name}!", icon="👋")
-                        st.success(f"Welcome back, {display_name}!")
-                        st.rerun()
+                            st.toast(f"Welcome back, {display_name}!", icon="👋")
+                            st.success(f"Welcome back, {display_name}!")
+                            st.rerun()
                     else:
                         st.error("Invalid Email Address or Password!")
 
@@ -624,7 +613,7 @@ def login():
                     sent_ok, msg_res = send_credentials_email(found_user[1], target_name, otp, found_user[2], is_otp=True)
                     if sent_ok:
                         st.toast("Verification code sent!", icon="📩")
-                        st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user[1]}! (OTP will expire in 3 minutes)")
+                        st.success(f"📩 Reset Verification Code has been dispatched directly to {found_user[1]}! (OTP will expire in 2 minutes)")
                     else:
                         st.error(f"❌ Email dispatch failed: {msg_res}. Please check system logs or contact Admin.")
                 else:
@@ -642,11 +631,11 @@ def login():
                     is_expired = False
                     if otp_created_at:
                         time_diff = (datetime.datetime.now() - otp_created_at).total_seconds()
-                        if time_diff > 180: # 3 minutes TTL
+                        if time_diff > OTP_EXPIRY_SECONDS: # 2 minutes TTL
                             is_expired = True
 
                     if is_expired:
-                        st.error("⏰ Verification Code has EXPIRED (3-minute limit reached). Please request a new code.")
+                        st.error("⏰ Verification Code has EXPIRED (2-minute limit reached). Please request a new code.")
                         st.session_state["reset_otp"] = None
                         st.session_state["reset_user_email"] = None
                     elif entered_otp == st.session_state["reset_otp"]:
@@ -654,7 +643,7 @@ def login():
                             u_email = st.session_state["reset_user_email"]
                             with engine.begin() as conn:
                                 conn.execute(
-                                    text("UPDATE user_accounts SET password = :p, require_change_pass = 0 WHERE lower(email) = lower(:e)"),
+                                    text("UPDATE user_accounts SET password = :p, require_change_pass = 0, temp_pass_created_at = NULL WHERE lower(email) = lower(:e)"),
                                     {"p": new_pass, "e": u_email},
                                 )
                             st.toast("Password updated successfully!", icon="✅")
@@ -688,7 +677,7 @@ if st.session_state.get("must_change_pass"):
                     if new_p1 and new_p1 == new_p2:
                         with engine.begin() as conn:
                             conn.execute(
-                                text("UPDATE user_accounts SET password = :p, require_change_pass = 0 WHERE lower(email) = lower(:e)"),
+                                text("UPDATE user_accounts SET password = :p, require_change_pass = 0, temp_pass_created_at = NULL WHERE lower(email) = lower(:e)"),
                                 {"p": new_p1, "e": st.session_state["user_email"]},
                             )
                         st.session_state["must_change_pass"] = False
@@ -808,7 +797,7 @@ with st.sidebar.expander("🔑 Change My Password"):
                 if res_p and res_p[0] == old_p:
                     with engine.begin() as conn:
                         conn.execute(
-                            text("UPDATE user_accounts SET password = :p, require_change_pass = 0 WHERE lower(email) = lower(:e)"),
+                            text("UPDATE user_accounts SET password = :p, require_change_pass = 0, temp_pass_created_at = NULL WHERE lower(email) = lower(:e)"),
                             {"p": new_p1, "e": st.session_state["user_email"]},
                         )
                     st.toast("✅ Password updated successfully!", icon="🔑")
@@ -883,18 +872,10 @@ if selected_view == "Executive Dashboard":
     with c1:
         st.subheader("📊 Sub-Project Closeout Status")
         if not df_sp.empty and "overall_closeout_status" in df_sp.columns:
-            fig_status = px.pie(
-                df_sp,
-                names="overall_closeout_status",
-                hole=0.48,
-                color_discrete_sequence=PAMANA_PALETTE,
-            )
-            fig_status.update_traces(
-                textposition="inside",
-                textinfo="percent+label",
-                marker=dict(line=dict(color="#FFFFFF", width=2)),
-            )
-            st.plotly_chart(style_vibrant_fig(fig_status, height=340), use_container_width=True)
+            sp_status_df = df_sp["overall_closeout_status"].fillna("Unspecified").value_counts().reset_index()
+            sp_status_df.columns = ["Status", "Count"]
+            fig_status = build_pie_chart(sp_status_df, names_col="Status", values_col="Count", height=340)
+            st.plotly_chart(fig_status, use_container_width=True)
         else:
             st.info("No closeout status records found.")
 
@@ -903,14 +884,11 @@ if selected_view == "Executive Dashboard":
         if not df_sp.empty and "male_beneficiaries" in df_sp.columns and "female_beneficiaries" in df_sp.columns:
             m_sum = df_sp["male_beneficiaries"].sum()
             f_sum = df_sp["female_beneficiaries"].sum()
-            fig_gender = build_bar_diagram(
+            fig_gender = build_pie_chart(
                 pd.DataFrame({"Gender": ["Male", "Female"], "Count": [m_sum, f_sum]}),
-                x_col="Gender",
-                y_col="Count",
-                orientation="v",
-                color_col="Gender",
+                names_col="Gender",
+                values_col="Count",
                 color_map={"Male": "#0F2A4A", "Female": "#0284C7"},
-                bar_width=0.22,
                 height=340,
             )
             st.plotly_chart(fig_gender, use_container_width=True)
@@ -947,16 +925,7 @@ if selected_view == "Executive Dashboard":
         if not df_ceac_brgy.empty and "activity_name" in df_ceac_brgy.columns:
             brgy_counts = df_ceac_brgy["activity_name"].fillna("Unspecified").value_counts().reset_index()
             brgy_counts.columns = ["Activity", "Count"]
-            fig_cb = build_bar_diagram(
-                brgy_counts,
-                x_col="Count",
-                y_col="Activity",
-                orientation="h",
-                color_col="Activity",
-                bar_width=0.16 if len(brgy_counts) <= 2 else 0.34,
-                height=310,
-            )
-            fig_cb.update_layout(showlegend=False)
+            fig_cb = build_pie_chart(brgy_counts, names_col="Activity", values_col="Count", height=320)
             st.plotly_chart(fig_cb, use_container_width=True)
         else:
             st.info("No CEAC Barangay records found.")
@@ -966,21 +935,12 @@ if selected_view == "Executive Dashboard":
         if not df_ceac_muni.empty and "activity_name" in df_ceac_muni.columns:
             muni_counts = df_ceac_muni["activity_name"].fillna("Unspecified").value_counts().reset_index()
             muni_counts.columns = ["Activity", "Count"]
-            fig_cm = build_bar_diagram(
-                muni_counts,
-                x_col="Count",
-                y_col="Activity",
-                orientation="h",
-                color_col="Activity",
-                bar_width=0.16 if len(muni_counts) <= 2 else 0.34,
-                height=310,
-            )
-            fig_cm.update_layout(showlegend=False)
+            fig_cm = build_pie_chart(muni_counts, names_col="Activity", values_col="Count", height=320)
             st.plotly_chart(fig_cm, use_container_width=True)
         else:
             st.info("No CEAC Municipal records found.")
 
-    # Slimmer Bar Diagram for Cycle Progression (avoiding bulky square block)
+    # Pie Chart Breakdown for CEAC Activities by Level & Cycle
     anim_frames = []
     if not df_ceac_brgy.empty and "activity_name" in df_ceac_brgy.columns:
         ab = df_ceac_brgy.copy()
@@ -1001,19 +961,9 @@ if selected_view == "Executive Dashboard":
             .reset_index(name="Activities")
         )
         if not df_anim_grp.empty:
-            st.markdown("##### 📊 CEAC Activity Progression by Cycle")
-            use_facet = df_anim_grp["Cycle"].nunique() > 1
-            fig_anim = build_bar_diagram(
-                df_anim_grp,
-                x_col="activity_name",
-                y_col="Activities",
-                orientation="v",
-                color_col="Level",
-                color_map={"Barangay": "#0284C7", "Municipal": "#0F2A4A"},
-                facet_col="Cycle" if use_facet else None,
-                bar_width=0.14 if df_anim_grp["activity_name"].nunique() <= 2 else 0.24,
-                height=310,
-            )
+            st.markdown("##### 🥧 CEAC Activity Share by Cycle & Level")
+            df_anim_grp["Label"] = df_anim_grp["activity_name"] + " (" + df_anim_grp["Level"] + " • " + df_anim_grp["Cycle"] + ")"
+            fig_anim = build_pie_chart(df_anim_grp, names_col="Label", values_col="Activities", height=340)
             st.plotly_chart(fig_anim, use_container_width=True)
 
     recent_frames = []
@@ -1114,11 +1064,12 @@ elif selected_view == "User Management Portal":
             if submit_user:
                 if new_fullname and new_email:
                     try:
+                        now_utc = datetime.datetime.now(datetime.timezone.utc)
                         with engine.begin() as conn:
                             conn.execute(text("SELECT setval(pg_get_serial_sequence('user_accounts', 'id'), COALESCE(MAX(id), 1)) FROM user_accounts;"))
                             conn.execute(
-                                text("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass) VALUES (:fn, :e, :p, :r, 1)"),
-                                {"fn": new_fullname, "e": new_email, "p": curr_temp_pass, "r": new_role},
+                                text("INSERT INTO user_accounts (full_name, email, password, user_role, require_change_pass, temp_pass_created_at) VALUES (:fn, :e, :p, :r, 1, :tca)"),
+                                {"fn": new_fullname, "e": new_email, "p": curr_temp_pass, "r": new_role, "tca": now_utc},
                             )
 
                         st.toast(f"✅ User '{new_fullname}' created!", icon="👤")
@@ -1127,12 +1078,12 @@ elif selected_view == "User Management Portal":
                         if send_via_email:
                             sent_ok, msg_res = send_credentials_email(new_email, new_fullname, curr_temp_pass, new_role)
                             if sent_ok:
-                                st.success(f"📩 Account credentials emailed directly to {new_email}!")
+                                st.success(f"📩 Account credentials emailed directly to {new_email}! (Temp pass expires in 24 hours)")
                             else:
                                 st.warning(f"⚠️ Email dispatch status: {msg_res}")
-                                st.info(f"🔑 **BACKUP DISPLAY PASS:** `{curr_temp_pass}`")
+                                st.info(f"🔑 **BACKUP DISPLAY PASS:** `{curr_temp_pass}` (Expires in 24 hours)")
                         else:
-                            st.info(f"🔑 **USER TEMPORARY PASS:** `{curr_temp_pass}`")
+                            st.info(f"🔑 **USER TEMPORARY PASS:** `{curr_temp_pass}` (Expires in 24 hours)")
 
                         st.session_state["gen_temp_pass"] = generate_random_password()
                         st.rerun()
@@ -1163,10 +1114,14 @@ elif selected_view == "User Management Portal":
             if st.button("🔄 Reset Password Now", use_container_width=True):
                 r_id, r_email, r_name, r_role = u_dict[selected_reset]
                 new_temp = generate_random_password()
+                now_utc = datetime.datetime.now(datetime.timezone.utc)
 
                 try:
                     with engine.begin() as conn:
-                        conn.execute(text("UPDATE user_accounts SET password = :p, require_change_pass = 1 WHERE id = :id"), {"p": new_temp, "id": r_id})
+                        conn.execute(
+                            text("UPDATE user_accounts SET password = :p, require_change_pass = 1, temp_pass_created_at = :tca WHERE id = :id"),
+                            {"p": new_temp, "tca": now_utc, "id": r_id},
+                        )
 
                     st.toast("🔑 Password reset initiated!", icon="🔐")
                     st.success(f"✅ Reset Password initiated for {r_email}!")
@@ -1174,12 +1129,12 @@ elif selected_view == "User Management Portal":
                     if send_reset_mail:
                         sent_ok, msg_res = send_credentials_email(r_email, r_name, new_temp, r_role)
                         if sent_ok:
-                            st.success(f"📩 Reset password emailed directly to {r_email}!")
+                            st.success(f"📩 Reset password emailed directly to {r_email}! (Temp pass expires in 24 hours)")
                         else:
                             st.warning(f"⚠️ Email dispatch status: {msg_res}")
-                            st.info(f"🔑 **BACKUP RESET PASS:** `{new_temp}`")
+                            st.info(f"🔑 **BACKUP RESET PASS:** `{new_temp}` (Expires in 24 hours)")
                     else:
-                        st.info(f"🔑 **NEW TEMPORARY PASS:** `{new_temp}`")
+                        st.info(f"🔑 **NEW TEMPORARY PASS:** `{new_temp}` (Expires in 24 hours)")
                 except Exception as ex:
                     st.error(f"❌ DATABASE ERROR: {ex}")
 
@@ -1191,7 +1146,10 @@ elif selected_view == "User Management Portal":
                     r_id, r_email, r_name, r_role = u_dict[selected_reset]
                     try:
                         with engine.begin() as conn:
-                            conn.execute(text("UPDATE user_accounts SET password = trim(:p), require_change_pass = 0 WHERE id = :id"), {"p": manual_custom_pass, "id": r_id})
+                            conn.execute(
+                                text("UPDATE user_accounts SET password = trim(:p), require_change_pass = 0, temp_pass_created_at = NULL WHERE id = :id"),
+                                {"p": manual_custom_pass, "id": r_id},
+                            )
                         st.toast("✅ Custom password updated!", icon="🔑")
                         st.success(f"✅ Password for {r_email} manually set to: `{manual_custom_pass}`! (Direct Login Enabled, no password change required)")
                     except Exception as ex:
@@ -1206,11 +1164,14 @@ elif selected_view == "User Management Portal":
     
     try:
         df_users = pd.read_sql_query(
-            text("SELECT id, full_name, email, user_role, require_change_pass, last_login FROM user_accounts ORDER BY id DESC"),
+            text("SELECT id, full_name, email, user_role, require_change_pass, temp_pass_created_at, last_login FROM user_accounts ORDER BY id DESC"),
             engine
         )
-        if not df_users.empty and "last_login" in df_users.columns:
-            df_users["last_login"] = df_users["last_login"].apply(format_ph_time)
+        if not df_users.empty:
+            if "last_login" in df_users.columns:
+                df_users["last_login"] = df_users["last_login"].apply(format_ph_time)
+            if "temp_pass_created_at" in df_users.columns:
+                df_users["temp_pass_created_at"] = df_users["temp_pass_created_at"].apply(format_ph_time)
         st.dataframe(df_users, use_container_width=True, hide_index=True)
 
         st.markdown("---")
