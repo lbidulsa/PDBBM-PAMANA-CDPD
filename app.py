@@ -66,36 +66,42 @@ def convert_image_to_base64(uploaded_file):
     return ""
 
 # ---------------------------------------------------------
-# VIBRANT PLOTLY STYLING HELPER
+# EXECUTIVE PLOTLY STYLING HELPER (SLIM BARS + PAMANA THEME)
 # ---------------------------------------------------------
-def style_vibrant_fig(fig, title_text="", height=390, is_bar=False):
+PAMANA_PALETTE = [
+    "#0F2A4A", "#1D4ED8", "#0284C7", "#0EA5E9",
+    "#0D9488", "#2563EB", "#38BDF8", "#1E3A8A",
+    "#0F766E", "#6366F1", "#0369A1", "#3B82F6"
+]
+
+def style_vibrant_fig(fig, title_text="", height=350, is_bar=False):
     fig.update_layout(
         title=dict(
             text=title_text,
-            font=dict(size=15, color="#0F2A4A", family="Arial, sans-serif"),
+            font=dict(size=14, color="#0F2A4A", family="Arial, sans-serif"),
             x=0.01,
         ) if title_text else None,
-        paper_bgcolor="rgba(255,255,255,0.92)",
-        plot_bgcolor="rgba(248,250,255,0.95)",
+        paper_bgcolor="rgba(255,255,255,0.95)",
+        plot_bgcolor="rgba(248,250,255,0.98)",
         font=dict(color="#1E293B", family="Arial, sans-serif"),
         height=height,
-        margin=dict(l=16, r=16, t=42 if title_text else 24, b=24),
+        margin=dict(l=16, r=20, t=36 if title_text else 20, b=24),
         hoverlabel=dict(
             bgcolor="#0F2A4A",
             font_size=12,
             font_family="Arial, sans-serif",
             font_color="#FFFFFF",
-            bordercolor="#00E6FF",
+            bordercolor="#38BDF8",
         ),
-        transition=dict(duration=650, easing="cubic-in-out"),
+        transition=dict(duration=600, easing="cubic-in-out"),
     )
     if is_bar:
         fig.update_traces(
             marker_line_color="#0F2A4A",
-            marker_line_width=1.2,
-            opacity=0.95,
+            marker_line_width=1.0,
+            opacity=0.92,
         )
-        fig.update_xaxes(showgrid=True, gridcolor="rgba(148,163,184,0.25)", zeroline=False)
+        fig.update_xaxes(showgrid=True, gridcolor="rgba(148,163,184,0.22)", zeroline=False)
         fig.update_yaxes(showgrid=False, zeroline=False)
     return fig
 
@@ -144,21 +150,21 @@ st.markdown(
         display: flex !important;
     }
 
-    /* Brighter, Lively App Background */
+    /* Clean Executive App Background */
     .stApp {
-        background: radial-gradient(circle at top right, rgba(0, 212, 255, 0.08), transparent 45%),
-                    radial-gradient(circle at bottom left, rgba(255, 107, 107, 0.08), transparent 45%),
+        background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 45%),
+                    radial-gradient(circle at bottom left, rgba(29, 78, 216, 0.06), transparent 45%),
                     linear-gradient(180deg, #F8FAFC 0%, #EEF4FF 100%);
     }
 
     @keyframes pulseGlow {
-        0% { box-shadow: 0 6px 20px rgba(15, 42, 74, 0.18); }
-        50% { box-shadow: 0 8px 26px rgba(0, 180, 216, 0.28); }
-        100% { box-shadow: 0 6px 20px rgba(15, 42, 74, 0.18); }
+        0% { box-shadow: 0 6px 20px rgba(15, 42, 74, 0.16); }
+        50% { box-shadow: 0 8px 26px rgba(2, 132, 199, 0.25); }
+        100% { box-shadow: 0 6px 20px rgba(15, 42, 74, 0.16); }
     }
 
     .hero-banner {
-        background: linear-gradient(120deg, #0F2A4A 0%, #1D4ED8 55%, #0EA5E9 100%);
+        background: linear-gradient(120deg, #0F2A4A 0%, #1D4ED8 55%, #0284C7 100%);
         color: #FFFFFF;
         padding: 18px 24px;
         border-radius: 16px;
@@ -170,16 +176,19 @@ st.markdown(
     .main-title { font-size: 26px; font-weight: 800; color: #FFFFFF; margin-bottom: 4px; letter-spacing: 0.3px; }
     .sub-title { font-size: 14px; color: #E0F2FE; margin-bottom: 0px; }
 
+    /* Updated Oval Badge Matching PAMANA Navy & Sky Blue Theme */
     .section-pill {
         display: inline-block;
-        background: linear-gradient(90deg, #FF6B6B 0%, #F59E0B 50%, #10B981 100%);
+        background: linear-gradient(90deg, #0F2A4A 0%, #1E40AF 55%, #0284C7 100%);
         color: #FFFFFF;
         font-weight: 700;
         font-size: 12px;
-        padding: 4px 12px;
+        padding: 5px 14px;
         border-radius: 999px;
-        margin-bottom: 6px;
-        letter-spacing: 0.4px;
+        margin-bottom: 8px;
+        letter-spacing: 0.5px;
+        border: 1px solid rgba(186, 230, 253, 0.45);
+        box-shadow: 0 3px 10px rgba(15, 42, 74, 0.18);
     }
     
     .stMetric { 
@@ -187,26 +196,26 @@ st.markdown(
         padding: 16px !important; 
         border-radius: 14px !important; 
         border: 1px solid #CBD5E1 !important;
-        border-top: 4px solid #0EA5E9 !important;
+        border-top: 4px solid #0284C7 !important;
         box-shadow: 0 4px 12px rgba(15, 42, 74, 0.06) !important;
         transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
     }
     .stMetric:hover {
-        transform: translateY(-5px) scale(1.02) !important;
-        border-color: #EC4899 !important;
-        border-top-color: #F43F5E !important;
-        box-shadow: 0 0 18px rgba(244, 63, 94, 0.35), 0 8px 24px rgba(14, 165, 233, 0.25) !important;
+        transform: translateY(-4px) scale(1.015) !important;
+        border-color: #0284C7 !important;
+        border-top-color: #0F2A4A !important;
+        box-shadow: 0 8px 22px rgba(2, 132, 199, 0.22) !important;
     }
     
     .role-badge { 
-        background: linear-gradient(135deg, #0EA5E9 0%, #6366F1 100%); 
+        background: linear-gradient(135deg, #0284C7 0%, #1E40AF 100%); 
         color: white; 
         padding: 5px 12px; 
         border-radius: 20px; 
         font-size: 12px; 
         font-weight: 700;
         display: inline-block;
-        box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+        box-shadow: 0 2px 8px rgba(30, 64, 175, 0.3);
     }
     
     section[data-testid="stSidebar"] {
@@ -235,10 +244,10 @@ st.markdown(
     div.stButton > button:hover, 
     div.stFormSubmitButton > button:hover,
     .stSidebar div.stButton > button:hover {
-        background: linear-gradient(135deg, #FFF1F2 0%, #FFFFFF 100%) !important;
-        color: #BE123C !important;
-        border-color: #F43F5E !important;
-        box-shadow: 0 0 16px rgba(244, 63, 94, 0.5), 0 0 24px rgba(14, 165, 233, 0.25) !important;
+        background: linear-gradient(135deg, #E0F2FE 0%, #FFFFFF 100%) !important;
+        color: #0F2A4A !important;
+        border-color: #0284C7 !important;
+        box-shadow: 0 0 14px rgba(2, 132, 199, 0.35) !important;
         transform: translateY(-2px) scale(1.01) !important;
     }
     
@@ -246,12 +255,11 @@ st.markdown(
     div.stFormSubmitButton > button:active,
     .stSidebar div.stButton > button:active {
         transform: translateY(1px) scale(0.99) !important;
-        box-shadow: 0 0 6px rgba(244, 63, 94, 0.4) !important;
     }
     
     .active-user-card {
-        background: linear-gradient(90deg, #FFFFFF 0%, #F0FDF4 100%);
-        border-left: 4px solid #10B981;
+        background: linear-gradient(90deg, #FFFFFF 0%, #F0F9FF 100%);
+        border-left: 4px solid #0284C7;
         padding: 12px 16px;
         border-radius: 10px;
         margin-bottom: 8px;
@@ -260,7 +268,7 @@ st.markdown(
     }
     .active-user-card:hover {
         transform: translateX(4px);
-        box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
+        box-shadow: 0 0 12px rgba(2, 132, 199, 0.25);
     }
     </style>
 """,
@@ -811,16 +819,15 @@ if selected_view == "Executive Dashboard":
             fig_status = px.pie(
                 df_sp,
                 names="overall_closeout_status",
-                hole=0.45,
-                color_discrete_sequence=["#0EA5E9", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6", "#14B8A6"],
+                hole=0.48,
+                color_discrete_sequence=PAMANA_PALETTE,
             )
             fig_status.update_traces(
                 textposition="inside",
                 textinfo="percent+label",
                 marker=dict(line=dict(color="#FFFFFF", width=2)),
-                pull=[0.04] * df_sp["overall_closeout_status"].nunique(),
             )
-            st.plotly_chart(style_vibrant_fig(fig_status, height=370), use_container_width=True)
+            st.plotly_chart(style_vibrant_fig(fig_status, height=340), use_container_width=True)
         else:
             st.info("No closeout status records found.")
 
@@ -835,15 +842,19 @@ if selected_view == "Executive Dashboard":
                 y="Count",
                 color="Gender",
                 text_auto=",.0f",
-                color_discrete_map={"Male": "#0284C7", "Female": "#F43F5E"},
+                color_discrete_map={"Male": "#0F2A4A", "Female": "#0284C7"},
             )
-            fig_gender.update_traces(textfont=dict(size=13, color="#0F2A4A"), textposition="outside")
-            st.plotly_chart(style_vibrant_fig(fig_gender, height=370, is_bar=True), use_container_width=True)
+            fig_gender.update_traces(
+                width=0.34,
+                textfont=dict(size=12, color="#0F2A4A"),
+                textposition="outside",
+            )
+            st.plotly_chart(style_vibrant_fig(fig_gender, height=340, is_bar=True), use_container_width=True)
         else:
             st.info("No beneficiary records found.")
 
     st.markdown("---")
-    st.markdown('<span class="section-pill">🌈 LIVE CEAC ANALYTICS</span>', unsafe_allow_html=True)
+    st.markdown('<span class="section-pill">📊 LIVE CEAC ANALYTICS</span>', unsafe_allow_html=True)
     st.subheader("🏛️ CEAC Activities Overview (Municipal & Barangay)")
 
     muni_cnt = len(df_ceac_muni) if not df_ceac_muni.empty else 0
@@ -879,14 +890,18 @@ if selected_view == "Executive Dashboard":
                 orientation="h",
                 text_auto=True,
                 color="Activity",
-                color_discrete_sequence=["#FF6B6B", "#4ECDC4", "#FFD166", "#6C5CE7", "#00BBF9", "#00F5D4", "#F15BB5", "#FF9F1C", "#2EC4B6", "#8338EC", "#3A86FF", "#FB5607"],
+                color_discrete_sequence=PAMANA_PALETTE,
             )
-            fig_cb.update_traces(textfont=dict(size=12, color="#FFFFFF"), textposition="inside")
+            fig_cb.update_traces(
+                width=0.38 if len(brgy_counts) <= 2 else 0.58,
+                textfont=dict(size=12, color="#0F2A4A"),
+                textposition="outside",
+            )
             fig_cb.update_layout(
                 showlegend=False,
                 yaxis={"categoryorder": "total ascending"},
             )
-            st.plotly_chart(style_vibrant_fig(fig_cb, height=390, is_bar=True), use_container_width=True)
+            st.plotly_chart(style_vibrant_fig(fig_cb, height=320, is_bar=True), use_container_width=True)
         else:
             st.info("No CEAC Barangay records found.")
 
@@ -902,18 +917,22 @@ if selected_view == "Executive Dashboard":
                 orientation="h",
                 text_auto=True,
                 color="Activity",
-                color_discrete_sequence=["#00BBF9", "#F15BB5", "#00F5D4", "#FEE440", "#9B5DE5", "#FF6B6B", "#06D6A0", "#118AB2", "#EF476F", "#FFD166", "#3A86FF", "#FF9F1C"],
+                color_discrete_sequence=PAMANA_PALETTE,
             )
-            fig_cm.update_traces(textfont=dict(size=12, color="#FFFFFF"), textposition="inside")
+            fig_cm.update_traces(
+                width=0.38 if len(muni_counts) <= 2 else 0.58,
+                textfont=dict(size=12, color="#0F2A4A"),
+                textposition="outside",
+            )
             fig_cm.update_layout(
                 showlegend=False,
                 yaxis={"categoryorder": "total ascending"},
             )
-            st.plotly_chart(style_vibrant_fig(fig_cm, height=390, is_bar=True), use_container_width=True)
+            st.plotly_chart(style_vibrant_fig(fig_cm, height=320, is_bar=True), use_container_width=True)
         else:
             st.info("No CEAC Municipal records found.")
 
-    # Animated Cycle Progression Bar Chart
+    # Slimmer Grouped Bar Chart for Cycle Progression
     anim_frames = []
     if not df_ceac_brgy.empty and "activity_name" in df_ceac_brgy.columns:
         ab = df_ceac_brgy.copy()
@@ -934,7 +953,7 @@ if selected_view == "Executive Dashboard":
             .reset_index(name="Activities")
         )
         if not df_anim_grp.empty and df_anim_grp["Cycle"].nunique() >= 1:
-            st.markdown("##### 🎬 Animated CEAC Activity Progression by Cycle")
+            st.markdown("##### 📊 CEAC Activity Progression by Cycle")
             fig_anim = px.bar(
                 df_anim_grp,
                 x="activity_name",
@@ -943,11 +962,16 @@ if selected_view == "Executive Dashboard":
                 animation_frame="Cycle",
                 barmode="group",
                 text_auto=True,
-                color_discrete_map={"Barangay": "#10B981", "Municipal": "#6366F1"},
+                color_discrete_map={"Barangay": "#0284C7", "Municipal": "#0F2A4A"},
+            )
+            fig_anim.update_traces(
+                width=0.26 if df_anim_grp["activity_name"].nunique() <= 3 else 0.42,
+                textposition="outside",
+                textfont=dict(size=12, color="#0F2A4A"),
             )
             fig_anim.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 900
             fig_anim.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = 500
-            st.plotly_chart(style_vibrant_fig(fig_anim, height=380, is_bar=True), use_container_width=True)
+            st.plotly_chart(style_vibrant_fig(fig_anim, height=330, is_bar=True), use_container_width=True)
 
     recent_frames = []
     if not df_ceac_brgy.empty:
