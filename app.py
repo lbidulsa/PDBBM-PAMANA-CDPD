@@ -18,6 +18,18 @@ import plotly.graph_objects as go
 from sqlalchemy import create_engine, text
 import streamlit as st
 
+try:
+    import pypdfium2 as pdfium
+    HAS_PDFIUM = True
+except ImportError:
+    HAS_PDFIUM = False
+
+try:
+    from streamlit_pdf_viewer import pdf_viewer as st_pdf_viewer
+    HAS_ST_PDF_VIEWER = True
+except ImportError:
+    HAS_ST_PDF_VIEWER = False
+
 # Timezone Support
 try:
     from zoneinfo import ZoneInfo
@@ -902,6 +914,53 @@ def parse_mov_filenames(raw_val):
         return []
     return [part.strip() for part in txt.split(",") if part.strip()]
 
+def render_pdf_pages_in_app(file_bytes: bytes, key_prefix: str, filename: str):
+    """Renders PDF pages directly inside Streamlit as images (no browser iframe/download needed)."""
+    if HAS_PDFIUM:
+        try:
+            pdf = pdfium.PdfDocument(file_bytes)
+            total_pages = len(pdf)
+            st.caption(f"📄 In-App PDF Viewer • Total Pages: **{total_pages}**")
+
+            c_pg, c_zm = st.columns([2, 1])
+            with c_pg:
+                page_num = st.number_input(
+                    "Page Number",
+                    min_value=1,
+                    max_value=max(1, total_pages),
+                    value=1,
+                    step=1,
+                    key=f"pdf_pg_{key_prefix}_{filename}",
+                )
+            with c_zm:
+                scale = st.selectbox(
+                    "Zoom Scale",
+                    options=[1.0, 1.5, 2.0],
+                    index=1,
+                    format_func=lambda s: f"{int(s*100)}%",
+                    key=f"pdf_zm_{key_prefix}_{filename}",
+                )
+
+            page = pdf[int(page_num) - 1]
+            bitmap = page.render(scale=float(scale))
+            pil_img = bitmap.to_pil()
+            st.image(pil_img, caption=f"{filename} — Page {int(page_num)} of {total_pages}", use_container_width=True)
+            return
+        except Exception as ex:
+            st.warning(f"⚠️ Could not render PDF pages with pypdfium2: {ex}")
+
+    if HAS_ST_PDF_VIEWER:
+        try:
+            st_pdf_viewer(file_bytes, width=850, height=650)
+            return
+        except Exception:
+            pass
+
+    st.info(
+        "ℹ️ Para ma-view ang PDF direkta sa sulod sa app nga dili na kinahanglan i-download, "
+        "idugang ang `pypdfium2` sa `requirements.txt` (`pip install pypdfium2`)."
+    )
+
 def render_single_mov_file(filename, key_prefix, record_row=None, module_label="", col_name=""):
     file_path = os.path.join("uploaded_movs", filename)
     st.markdown(f"**📄 File:** `{filename}`")
@@ -937,12 +996,7 @@ def render_single_mov_file(filename, key_prefix, record_row=None, module_label="
         if ext in [".png", ".jpg", ".jpeg"]:
             st.image(file_bytes, caption=filename, use_container_width=True)
         elif ext == ".pdf":
-            b64_pdf = base64.b64encode(file_bytes).decode("utf-8")
-            pdf_html = (
-                f'<iframe src="data:application/pdf;base64,{b64_pdf}" '
-                f'width="100%" height="520" style="border: 1px solid #CBD5E1; border-radius: 8px;"></iframe>'
-            )
-            st.markdown(pdf_html, unsafe_allow_html=True)
+            render_pdf_pages_in_app(file_bytes, key_prefix=key_prefix, filename=filename)
         else:
             st.info(f"ℹ️ Preview for `{ext}` is not inline; use the Download button above to open `{filename}`.")
     else:
