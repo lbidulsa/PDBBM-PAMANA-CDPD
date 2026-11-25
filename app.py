@@ -1,6 +1,7 @@
 import base64
 import datetime
 import io
+import json
 import os
 import random
 import re
@@ -31,9 +32,10 @@ try:
 except ImportError:
     HAS_GEO_EVAL = False
 
-# Security TTL Constants
+# Security & Archive TTL Constants
 OTP_EXPIRY_SECONDS = 120          # 2 minutes for Password Reset OTP
 TEMP_PASS_EXPIRY_HOURS = 24       # 24 hours for Temporary Password
+ARCHIVE_RETENTION_DAYS = 30       # 30 days auto-archive retention window
 
 # ---------------------------------------------------------
 # 🇵🇭 TIMEZONE HELPER FUNCTION FOR PHILIPPINE STANDARD TIME
@@ -525,7 +527,7 @@ def load_db_table(table_name):
     except Exception:
         return pd.DataFrame()
 
-# AUTO-SYNC SCHEMA FOR NEW MOV OTHER/S & TEMP PASS EXPIRY FIELDS
+# AUTO-SYNC SCHEMA FOR NEW MOV OTHER/S, TEMP PASS EXPIRY, DELETE REQUESTS & 30-DAY ARCHIVE
 try:
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE;"))
@@ -533,6 +535,35 @@ try:
         conn.execute(text("ALTER TABLE geotagged_photos ADD COLUMN IF NOT EXISTS image_base64 TEXT;"))
         conn.execute(text("ALTER TABLE ceac_barangay ADD COLUMN IF NOT EXISTS mov_other_files TEXT;"))
         conn.execute(text("ALTER TABLE ceac_municipal ADD COLUMN IF NOT EXISTS mov_other_files TEXT;"))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS deletion_requests (
+                id SERIAL PRIMARY KEY,
+                source_table VARCHAR(100) NOT NULL,
+                record_id BIGINT NOT NULL,
+                record_summary TEXT,
+                record_payload TEXT NOT NULL,
+                requested_by VARCHAR(255) NOT NULL,
+                requester_role VARCHAR(50),
+                reason TEXT,
+                status VARCHAR(30) DEFAULT 'Pending',
+                reviewed_by VARCHAR(255),
+                reviewed_at TIMESTAMP WITH TIME ZONE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS archived_records (
+                id SERIAL PRIMARY KEY,
+                source_table VARCHAR(100) NOT NULL,
+                original_record_id BIGINT NOT NULL,
+                record_summary TEXT,
+                record_payload TEXT NOT NULL,
+                requested_by VARCHAR(255),
+                approved_by VARCHAR(255),
+                archived_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                auto_purge_at TIMESTAMP WITH TIME ZONE NOT NULL
+            );
+        """))
 except Exception:
     pass
 
@@ -704,7 +735,7 @@ if st.session_state.get("must_change_pass"):
         st.stop()
 
 # ---------------------------------------------------------
-# 3. GLOBAL CONFIGURATIONS & ACTIVITIES LISTS
+# 3. GLOBAL CONFIGURATIONS, PERMISSIONS, MOV VIEWER & ARCHIVE HELPERS
 # ---------------------------------------------------------
 REGIONS = ["REGION X"]
 PROVINCES = ["Misamis Occidental", "Lanao del Norte"]
@@ -728,15 +759,16 @@ BARANGAY_ACTIVITIES = [
 ALL_TABS = [
     "Executive Dashboard", "User Management Portal", "CEAC_Municipal", "CEAC_Barangay",
     "Geotagged_Photos", "Disbursement", "Sub_Project_Closeout_Tracker", "SP_Profile", "Summary", "Finance",
-    "Data Extraction & Export"
+    "Data Extraction & Export", "Delete Requests & 30-Day Archive"
 ]
 
 current_role = st.session_state.get("user_role", "AC")
+current_user_name = st.session_state.get("user_name", "")
 
 if current_role == "Superuser":
     TABS = ALL_TABS
 else:
-    TABS = [tab for tab in ALL_TABS if tab != "User Management Portal"]
+    TABS = [tab for tab in ALL_TABS if tab not in ["User Management Portal", "Delete Requests & 30-Day Archive"]]
 
 def can_edit_module(role, module):
     if role in ["Superuser", "Admin"]:
@@ -752,6 +784,41 @@ def can_edit_module(role, module):
     elif role == "CEF":
         return False  # CEF is strictly View-Only across all modules
     return False
+
+def get_record_owner(record_row):
+    if record_row is None:
+        return ""
+    for col in ["encoded_by", "encoder", "created_by"]:
+        if col in record_row and pd.notna(record_row.get(col)):
+            val = str(record_row.get(col) or "").strip()
+            if val:
+                return val
+    return ""
+
+def is_record_owner(record_row):
+    owner = get_record_owner(record_row)
+    return bool(owner and owner.lower() == str(current_user_name or "").strip().lower())
+
+def can_view_movs(role, record_row=None):
+    """Superuser, MDM, and the user who encoded the record (plus Admin) can view MOVs."""
+    if role in ["Superuser", "Admin", "MDM"]:
+        return True
+    if is_record_owner(record_row):
+        return True
+    return False
+
+def can_edit_record_row(role, module, record_row):
+    """Superuser can edit any record; Admin and other non-CEF users can edit their own entry (or permitted module)."""
+    if role == "Superuser":
+        return True
+    if role == "CEF":
+        return False
+    if is_record_owner(record_row):
+        return True
+    if role == "Admin":
+        # Admin can edit own entry; if record has no owner tagged, allow module edit
+        return get_record_owner(record_row) == ""
+    return can_edit_module(role, module)
 
 def save_uploaded_file(file_obj):
     if file_obj is not None:
@@ -770,6 +837,156 @@ def save_multiple_files(files_list):
                 f.write(file_obj.getbuffer())
             saved_names.append(file_obj.name)
     return ", ".join(saved_names)
+
+def parse_mov_filenames(raw_val):
+    if raw_val is None or pd.isna(raw_val):
+        return []
+    txt = str(raw_val).strip()
+    if not txt or txt.upper().startswith("N/A"):
+        return []
+    return [part.strip() for part in txt.split(",") if part.strip()]
+
+def render_single_mov_file(filename, key_prefix):
+    file_path = os.path.join("uploaded_movs", filename)
+    st.markdown(f"**📄 File:** `{filename}`")
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        with open(file_path, "rb") as f:
+            file_bytes = f.read()
+
+        ext = os.path.splitext(filename)[1].lower()
+        c_dl, c_info = st.columns([1, 2])
+        with c_dl:
+            st.download_button(
+                label=f"⬇️ Download {filename}",
+                data=file_bytes,
+                file_name=filename,
+                key=f"dl_{key_prefix}_{filename}",
+                use_container_width=True,
+            )
+        with c_info:
+            st.caption(f"Size: {len(file_bytes)/1024:.1f} KB")
+
+        if ext in [".png", ".jpg", ".jpeg"]:
+            st.image(file_bytes, caption=filename, use_container_width=True)
+        elif ext == ".pdf":
+            b64_pdf = base64.b64encode(file_bytes).decode("utf-8")
+            pdf_html = (
+                f'<iframe src="data:application/pdf;base64,{b64_pdf}" '
+                f'width="100%" height="520" style="border: 1px solid #CBD5E1; border-radius: 8px;"></iframe>'
+            )
+            st.markdown(pdf_html, unsafe_allow_html=True)
+        else:
+            st.info(f"ℹ️ Preview for `{ext}` is not inline; use the Download button above to open `{filename}`.")
+    else:
+        st.warning(f"⚠️ File `{filename}` not found in server `uploaded_movs/` folder (may have been uploaded prior to container restart).")
+
+def render_mov_inspector(df_rows, module_label):
+    """Displays MOVs tagsa-tagsa for authorized users (Superuser, MDM, or record encoder)."""
+    st.markdown("---")
+    st.subheader(f"🔎 MOV Inspector (Check Scanned Files One-by-One) — {module_label}")
+
+    if df_rows.empty:
+        st.info("No records available for MOV inspection.")
+        return
+
+    mov_cols_map = {
+        "Attendance": "mov_attendance",
+        "Minutes of Activity": "mov_minutes",
+        "Brgy Minutes": "mov_brgy_minutes",
+        "LGU Minutes": "mov_lgu_minutes",
+        "GRS Files": "mov_grs_files",
+        "CV Files": "mov_cv_files",
+        "Other Files": "mov_other_files",
+        "MOV File": "mov_file",
+        "Attachment": "attachment",
+    }
+    present_mov_cols = {lbl: col for lbl, col in mov_cols_map.items() if col in df_rows.columns}
+    if not present_mov_cols:
+        st.info("This table has no MOV file columns.")
+        return
+
+    options_map = {}
+    for idx, r in df_rows.iterrows():
+        rid = r.get("id", idx)
+        act = r.get("activity_name") or r.get("sp_name") or r.get("dv_number") or r.get("municipality") or "Record"
+        brgy = f" • {r.get('barangay')}" if "barangay" in r and pd.notna(r.get("barangay")) and str(r.get("barangay")).strip() else ""
+        cyc = f" [{r.get('cycle_batch')}]" if "cycle_batch" in r and pd.notna(r.get("cycle_batch")) else ""
+        enc = f" — by {r.get('encoded_by')}" if "encoded_by" in r and pd.notna(r.get("encoded_by")) else ""
+        label = f"ID #{rid} | {act}{brgy}{cyc}{enc}"
+        options_map[label] = (rid, r.to_dict())
+
+    sel_label = st.selectbox("Select Record to Inspect MOVs:", list(options_map.keys()), key=f"mov_sel_{module_label}")
+    sel_rid, sel_row = options_map[sel_label]
+
+    if not can_view_movs(current_role, sel_row):
+        st.warning("🔒 MOV viewing is restricted to Superuser, MDM, or the user who encoded this record.")
+        return
+
+    all_files = []
+    for slot_lbl, col_name in present_mov_cols.items():
+        for fname in parse_mov_filenames(sel_row.get(col_name)):
+            all_files.append((slot_lbl, col_name, fname))
+
+    if not all_files:
+        st.info("No uploaded MOV files found for this selected record.")
+        return
+
+    st.success(f"📂 Found **{len(all_files)}** uploaded MOV file(s) for `{sel_label}`.")
+    file_choice_labels = [f"[{i+1}/{len(all_files)}] {slot}: {fname}" for i, (slot, _, fname) in enumerate(all_files)]
+    chosen_idx = st.selectbox("Choose MOV File to View (Tagas-tagsa):", range(len(all_files)), format_func=lambda i: file_choice_labels[i], key=f"mov_file_pick_{module_label}_{sel_rid}")
+    chosen_slot, chosen_col, chosen_fname = all_files[chosen_idx]
+    st.caption(f"Category: **{chosen_slot}** (`{chosen_col}`)")
+    render_single_mov_file(chosen_fname, key_prefix=f"insp_{module_label}_{sel_rid}_{chosen_idx}")
+
+def serialize_record_payload(row_dict):
+    clean = {}
+    for k, v in row_dict.items():
+        if pd.isna(v):
+            clean[k] = None
+        elif isinstance(v, (datetime.date, datetime.datetime, pd.Timestamp)):
+            clean[k] = str(v)
+        else:
+            clean[k] = v
+    return json.dumps(clean)
+
+def submit_deletion_request(table_low, row_dict, reason_text):
+    rid = row_dict.get("id")
+    summary_parts = [
+        f"Table: {table_low}",
+        f"ID: {rid}",
+    ]
+    for k in ["activity_name", "sp_name", "sp_title", "dv_number", "municipality", "barangay", "cycle_batch"]:
+        if k in row_dict and row_dict[k] is not None and str(row_dict[k]).strip() != "":
+            summary_parts.append(f"{k}={row_dict[k]}")
+    rec_summary = " | ".join(summary_parts)
+    payload_json = serialize_record_payload(row_dict)
+
+    with engine.begin() as conn:
+        conn.execute(
+            text("""
+                INSERT INTO deletion_requests (source_table, record_id, record_summary, record_payload, requested_by, requester_role, reason, status)
+                VALUES (:st, :rid, :sum, :pay, :req_by, :req_role, :rsn, 'Pending')
+            """),
+            {
+                "st": table_low,
+                "rid": int(rid),
+                "sum": rec_summary,
+                "pay": payload_json,
+                "req_by": current_user_name,
+                "req_role": current_role,
+                "rsn": reason_text.strip() or "No reason provided",
+            },
+        )
+
+def purge_expired_archives():
+    """Auto-purges archived records past their 30-day retention date."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM archived_records WHERE auto_purge_at <= CURRENT_TIMESTAMP"))
+    except Exception:
+        pass
+
+purge_expired_archives()
 
 # ---------------------------------------------------------
 # 4. POLISHED SIDEBAR NAVIGATION & LOGO WITH DEVELOPER CREDIT
@@ -956,7 +1173,6 @@ if selected_view == "Executive Dashboard":
         else:
             st.info("No CEAC Municipal records found.")
 
-    # Pie Chart Breakdown for CEAC Activities by Level & Cycle (Normalized Labels)
     anim_frames = []
     if not df_ceac_brgy.empty and "activity_name" in df_ceac_brgy.columns:
         ab = pd.DataFrame({
@@ -1013,6 +1229,135 @@ if selected_view == "Executive Dashboard":
         keep_cols = [c for c in ["Level", "activity_name", "Location", "cycle_batch", "activity_date", "mov_status", "encoded_status", "encoded_by"] if c in df_ceac_all.columns]
         st.markdown("##### 🕒 Recent CEAC Activities Feed")
         st.dataframe(df_ceac_all[keep_cols].head(10), use_container_width=True, hide_index=True)
+
+# ---------------------------------------------------------
+# 5B. DELETE REQUESTS & 30-DAY AUTO-ARCHIVE (SUPERUSER ONLY)
+# ---------------------------------------------------------
+elif selected_view == "Delete Requests & 30-Day Archive":
+    if current_role != "Superuser":
+        st.error("⛔ ACCESS DENIED: Only Superuser can approve deletion requests or manage the 30-day archive.")
+        st.stop()
+
+    st.subheader("🗑️ Deletion Requests Approval & 30-Day Auto-Archive")
+    st.caption("Approved records are moved to archive and auto-purged after 30 days (SCMS-style retention).")
+
+    tab_req, tab_arch = st.tabs(["⏳ Pending / Reviewed Deletion Requests", "🗄️ 30-Day Archive Vault"])
+
+    with tab_req:
+        df_reqs = load_db_table("deletion_requests")
+        if df_reqs.empty:
+            st.info("No deletion requests found.")
+        else:
+            pending_df = df_reqs[df_reqs["status"] == "Pending"] if "status" in df_reqs.columns else df_reqs
+            st.markdown(f"##### Pending Approval ({len(pending_df)})")
+            if not pending_df.empty:
+                for _, req_r in pending_df.iterrows():
+                    req_id = int(req_r["id"])
+                    src_tbl = str(req_r["source_table"])
+                    rec_id = int(req_r["record_id"])
+                    st.markdown(f"**Request #{req_id}** — `{req_r.get('record_summary', '')}`")
+                    st.caption(f"Requested by: **{req_r.get('requested_by')}** ({req_r.get('requester_role')}) | Reason: *{req_r.get('reason')}*")
+                    c_ap, c_rj = st.columns(2)
+                    with c_ap:
+                        if st.button("✅ Approve & Archive (30 Days)", key=f"app_del_{req_id}", use_container_width=True):
+                            try:
+                                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                                purge_dt = now_utc + datetime.timedelta(days=ARCHIVE_RETENTION_DAYS)
+                                with engine.begin() as conn:
+                                    conn.execute(
+                                        text("""
+                                            INSERT INTO archived_records (source_table, original_record_id, record_summary, record_payload, requested_by, approved_by, archived_at, auto_purge_at)
+                                            VALUES (:st, :orid, :sum, :pay, :reqby, :appby, :arch, :prg)
+                                        """),
+                                        {
+                                            "st": src_tbl,
+                                            "orid": rec_id,
+                                            "sum": req_r.get("record_summary", ""),
+                                            "pay": req_r.get("record_payload", "{}"),
+                                            "reqby": req_r.get("requested_by", ""),
+                                            "appby": current_user_name,
+                                            "arch": now_utc,
+                                            "prg": purge_dt,
+                                        },
+                                    )
+                                    conn.execute(text(f"DELETE FROM {src_tbl} WHERE id = :rid"), {"rid": rec_id})
+                                    conn.execute(
+                                        text("""
+                                            UPDATE deletion_requests
+                                            SET status = 'Approved', reviewed_by = :rb, reviewed_at = :ra
+                                            WHERE id = :reqid
+                                        """),
+                                        {"rb": current_user_name, "ra": now_utc, "reqid": req_id},
+                                    )
+                                st.toast("✅ Approved and archived for 30 days!", icon="🗄️")
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"❌ Error approving deletion: {ex}")
+                    with c_rj:
+                        if st.button("❌ Reject Request", key=f"rej_del_{req_id}", use_container_width=True):
+                            try:
+                                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                                with engine.begin() as conn:
+                                    conn.execute(
+                                        text("""
+                                            UPDATE deletion_requests
+                                            SET status = 'Rejected', reviewed_by = :rb, reviewed_at = :ra
+                                            WHERE id = :reqid
+                                        """),
+                                        {"rb": current_user_name, "ra": now_utc, "reqid": req_id},
+                                    )
+                                st.toast("Request rejected.", icon="❌")
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"❌ Error rejecting request: {ex}")
+                    st.markdown("---")
+            else:
+                st.success("No pending deletion requests.")
+
+            st.markdown("##### All Deletion Requests History")
+            show_cols = [c for c in ["id", "status", "source_table", "record_id", "record_summary", "requested_by", "reason", "reviewed_by", "reviewed_at"] if c in df_reqs.columns]
+            st.dataframe(df_reqs[show_cols], use_container_width=True, hide_index=True)
+
+    with tab_arch:
+        df_arch = load_db_table("archived_records")
+        if df_arch.empty:
+            st.info("Archive vault is empty.")
+        else:
+            st.markdown(f"##### Archived Records ({len(df_arch)}) — Auto-Purge after 30 Days")
+            disp_cols = [c for c in ["id", "source_table", "original_record_id", "record_summary", "requested_by", "approved_by", "archived_at", "auto_purge_at"] if c in df_arch.columns]
+            st.dataframe(df_arch[disp_cols], use_container_width=True, hide_index=True)
+
+            arch_ids = df_arch["id"].tolist()
+            sel_arch_id = st.selectbox("Select Archived Entry ID:", arch_ids, key="sel_arch_id_box")
+            sel_arch_row = df_arch[df_arch["id"] == sel_arch_id].iloc[0]
+
+            c_rst, c_prg = st.columns(2)
+            with c_rst:
+                if st.button("♻️ Restore Record Back to Active Table", key="btn_restore_arch", use_container_width=True):
+                    try:
+                        payload = json.loads(sel_arch_row["record_payload"])
+                        src_tbl = str(sel_arch_row["source_table"])
+                        payload.pop("id", None)
+                        if payload:
+                            cols_str = ", ".join(payload.keys())
+                            vals_str = ", ".join([f":{k}" for k in payload.keys()])
+                            with engine.begin() as conn:
+                                conn.execute(text(f"INSERT INTO {src_tbl} ({cols_str}) VALUES ({vals_str})"), payload)
+                                conn.execute(text("DELETE FROM archived_records WHERE id = :aid"), {"aid": int(sel_arch_id)})
+                            st.toast("✅ Record restored!", icon="♻️")
+                            st.success("Record restored to active table.")
+                            st.rerun()
+                    except Exception as ex:
+                        st.error(f"❌ Restore failed: {ex}")
+            with c_prg:
+                if st.button("🔥 Purge Immediately from Archive", key="btn_purge_arch", use_container_width=True):
+                    try:
+                        with engine.begin() as conn:
+                            conn.execute(text("DELETE FROM archived_records WHERE id = :aid"), {"aid": int(sel_arch_id)})
+                        st.toast("Purged from archive.", icon="🔥")
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"❌ Purge failed: {ex}")
 
 # ---------------------------------------------------------
 # 6. USER MANAGEMENT PORTAL (SUPERUSER ONLY - ALL ACCOUNTS INCLUDED)
@@ -1355,20 +1700,46 @@ elif selected_view == "Geotagged_Photos":
         st.subheader("📋 Raw Geotagged Photos Database Masterlist")
         st.dataframe(df_photos, use_container_width=True)
 
-        if current_role == "Superuser" and "id" in df_photos.columns:
-            with st.expander("⚙️ Superuser Action Panel (Delete Photo Record)"):
+        if "id" in df_photos.columns:
+            with st.expander("⚙️ Photo Record Action Panel (Request Delete / Superuser Archive)"):
                 photo_ids = df_photos["id"].tolist()
-                sel_pid = st.selectbox("Select Photo Record ID to Delete:", photo_ids, key="sel_pid_m")
-                
-                if st.button("🗑️ Delete Selected Photo Record", use_container_width=True, key="del_photo_btn"):
-                    try:
-                        with engine.begin() as conn:
-                            conn.execute(text("DELETE FROM geotagged_photos WHERE id = :id"), {"id": sel_pid})
-                        st.toast("✅ Record deleted!", icon="🗑️")
-                        st.success(f"Record ID {sel_pid} deleted successfully!")
-                        st.rerun()
-                    except Exception as ex:
-                        st.error(f"❌ ERROR: {ex}")
+                sel_pid = st.selectbox("Select Photo Record ID:", photo_ids, key="sel_pid_m")
+                p_row_dict = df_photos[df_photos["id"] == sel_pid].iloc[0].to_dict()
+                if current_role == "Superuser":
+                    if st.button("🗄️ Archive & Delete Photo Record (30-Day Retention)", use_container_width=True, key="del_photo_btn"):
+                        try:
+                            now_utc = datetime.datetime.now(datetime.timezone.utc)
+                            purge_dt = now_utc + datetime.timedelta(days=ARCHIVE_RETENTION_DAYS)
+                            with engine.begin() as conn:
+                                conn.execute(
+                                    text("""
+                                        INSERT INTO archived_records (source_table, original_record_id, record_summary, record_payload, requested_by, approved_by, archived_at, auto_purge_at)
+                                        VALUES ('geotagged_photos', :orid, :sum, :pay, :reqby, :appby, :arch, :prg)
+                                    """),
+                                    {
+                                        "orid": int(sel_pid),
+                                        "sum": f"geotagged_photos | ID={sel_pid} | {p_row_dict.get('sp_name', '')} | {p_row_dict.get('photo_file', '')}",
+                                        "pay": serialize_record_payload(p_row_dict),
+                                        "reqby": current_user_name,
+                                        "appby": current_user_name,
+                                        "arch": now_utc,
+                                        "prg": purge_dt,
+                                    },
+                                )
+                                conn.execute(text("DELETE FROM geotagged_photos WHERE id = :id"), {"id": sel_pid})
+                            st.toast("✅ Photo archived for 30 days!", icon="🗄️")
+                            st.rerun()
+                        except Exception as ex:
+                            st.error(f"❌ ERROR: {ex}")
+                elif current_role != "CEF":
+                    del_reason = st.text_input("Reason for Delete Request:", key="p_del_reason")
+                    if st.button("📤 Submit Delete Request to Superuser", use_container_width=True, key="req_del_photo_btn"):
+                        try:
+                            submit_deletion_request("geotagged_photos", p_row_dict, del_reason)
+                            st.toast("📤 Delete request sent to Superuser!", icon="📨")
+                            st.success("Deletion request submitted for Superuser approval.")
+                        except Exception as ex:
+                            st.error(f"❌ ERROR: {ex}")
     else:
         st.info("No geotagged photos uploaded yet.")
 
@@ -1555,7 +1926,7 @@ elif selected_view == "SP_Profile":
         df_spi_filtered = df_spi_filtered[mask]
 
     if not df_spi_filtered.empty:
-        can_sync_spi = (current_role in ["Superuser", "Admin"]) or has_edit_perm
+        can_sync_spi = (current_role == "Superuser") or has_edit_perm
 
         edited_spi_df = st.data_editor(
             df_spi_filtered,
@@ -1575,31 +1946,60 @@ elif selected_view == "SP_Profile":
             except Exception as ex:
                 st.error(f"❌ DATABASE ERROR: {ex}")
 
-        if current_role == "Superuser" and "id" in df_spi_filtered.columns:
+        if "id" in df_spi_filtered.columns:
             st.markdown("---")
-            with st.expander("⚙️ Superuser Record Action Panel (Edit / Delete Row in SP Profile)"):
+            with st.expander("⚙️ Record Action Panel (Edit / Request Delete / Superuser Archive in SP Profile)"):
                 row_ids = df_spi_filtered["id"].tolist()
-                selected_row_id = st.selectbox("Select Row ID to Edit or Delete:", row_ids, key="sel_id_sp_profile")
+                selected_row_id = st.selectbox("Select Row ID:", row_ids, key="sel_id_sp_profile")
+                row_data = df_spi_filtered[df_spi_filtered["id"] == selected_row_id].iloc[0].to_dict()
+                allow_row_edit = can_edit_record_row(current_role, "SP_Profile", row_data)
 
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
-                    if st.button("✏️ Edit Selected Record", use_container_width=True, key="btn_edit_sp_profile"):
+                    if allow_row_edit and st.button("✏️ Edit Selected Record", use_container_width=True, key="btn_edit_sp_profile"):
                         st.session_state["editing_id_sp_profile"] = selected_row_id
+                    elif not allow_row_edit:
+                        st.caption("Edit restricted to record owner or Superuser.")
 
                 with col_btn2:
-                    if st.button("🗑️ Delete Selected Record", use_container_width=True, key="btn_del_sp_profile"):
-                        try:
-                            with engine.begin() as conn:
-                                conn.execute(text("DELETE FROM spi_masterlist WHERE id = :id"), {"id": selected_row_id})
-                            st.toast("✅ Record deleted from Supabase!", icon="🗑️")
-                            st.success(f"Record ID {selected_row_id} deleted successfully!")
-                            st.rerun()
-                        except Exception as ex:
-                            st.error(f"❌ DATABASE ERROR: {ex}")
+                    if current_role == "Superuser":
+                        if st.button("🗄️ Archive & Delete Record (30-Day Retention)", use_container_width=True, key="btn_del_sp_profile"):
+                            try:
+                                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                                purge_dt = now_utc + datetime.timedelta(days=ARCHIVE_RETENTION_DAYS)
+                                with engine.begin() as conn:
+                                    conn.execute(
+                                        text("""
+                                            INSERT INTO archived_records (source_table, original_record_id, record_summary, record_payload, requested_by, approved_by, archived_at, auto_purge_at)
+                                            VALUES ('spi_masterlist', :orid, :sum, :pay, :reqby, :appby, :arch, :prg)
+                                        """),
+                                        {
+                                            "orid": int(selected_row_id),
+                                            "sum": f"spi_masterlist | ID={selected_row_id} | {row_data.get('sp_title', '')}",
+                                            "pay": serialize_record_payload(row_data),
+                                            "reqby": current_user_name,
+                                            "appby": current_user_name,
+                                            "arch": now_utc,
+                                            "prg": purge_dt,
+                                        },
+                                    )
+                                    conn.execute(text("DELETE FROM spi_masterlist WHERE id = :id"), {"id": selected_row_id})
+                                st.toast("✅ Archived for 30 days!", icon="🗄️")
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"❌ DATABASE ERROR: {ex}")
+                    elif current_role != "CEF":
+                        req_reason = st.text_input("Reason for Delete Request:", key="spi_del_reason")
+                        if st.button("📤 Request Delete (Needs Superuser Approval)", use_container_width=True, key="btn_req_del_sp_profile"):
+                            try:
+                                submit_deletion_request("spi_masterlist", row_data, req_reason)
+                                st.toast("📤 Delete request submitted!", icon="📨")
+                                st.success("Deletion request sent to Superuser for approval.")
+                            except Exception as ex:
+                                st.error(f"❌ DATABASE ERROR: {ex}")
 
-                if st.session_state.get("editing_id_sp_profile") == selected_row_id:
+                if st.session_state.get("editing_id_sp_profile") == selected_row_id and allow_row_edit:
                     st.markdown(f"##### 📝 Editing Record ID: `{selected_row_id}`")
-                    row_data = df_spi_filtered[df_spi_filtered["id"] == selected_row_id].iloc[0].to_dict()
 
                     with st.form(f"form_edit_spi_{selected_row_id}"):
                         updated_vals = {}
@@ -2052,7 +2452,7 @@ else:
         df_filtered = df_filtered[mask]
 
     if not df_filtered.empty:
-        can_sync_table = (current_role in ["Superuser", "Admin"]) or has_edit_perm
+        can_sync_table = (current_role == "Superuser") or has_edit_perm
 
         edited_df = st.data_editor(
             df_filtered,
@@ -2072,39 +2472,77 @@ else:
             except Exception as ex:
                 st.error(f"❌ DATABASE ERROR: {ex}")
 
-        if current_role == "Superuser" and "id" in df_filtered.columns:
-            st.markdown("---")
-            with st.expander(f"⚙️ Superuser Record Action Panel (Edit / Delete Row in {selected_view})"):
-                row_ids = df_filtered["id"].tolist()
-                selected_row_id = st.selectbox("Select Row ID to Edit or Delete:", row_ids, key=f"sel_id_{selected_view}")
-                
-                col_btn1, col_btn2 = st.columns(2)
-                
-                with col_btn1:
-                    if st.button("✏️ Edit Selected Record", use_container_width=True, key=f"btn_edit_{selected_view}"):
-                        st.session_state[f"editing_id_{selected_view}"] = selected_row_id
-                
-                with col_btn2:
-                    if st.button("🗑️ Delete Selected Record", use_container_width=True, key=f"btn_del_{selected_view}"):
-                        try:
-                            table_low = selected_view.lower()
-                            with engine.begin() as conn:
-                                conn.execute(text(f"DELETE FROM {table_low} WHERE id = :id"), {"id": selected_row_id})
-                            st.toast("✅ Record deleted from Supabase!", icon="🗑️")
-                            st.success(f"Record ID {selected_row_id} deleted successfully!")
-                            st.rerun()
-                        except Exception as ex:
-                            st.error(f"❌ DATABASE ERROR: {ex}")
+        # MOV Inspector (Superuser, MDM, or record encoder)
+        render_mov_inspector(df_filtered, selected_view)
 
-                if st.session_state.get(f"editing_id_{selected_view}") == selected_row_id:
+        if "id" in df_filtered.columns:
+            st.markdown("---")
+            with st.expander(f"⚙️ Record Action Panel (Edit / Request Delete / Superuser Archive in {selected_view})"):
+                row_ids = df_filtered["id"].tolist()
+                selected_row_id = st.selectbox("Select Row ID:", row_ids, key=f"sel_id_{selected_view}")
+                row_data = df_filtered[df_filtered["id"] == selected_row_id].iloc[0].to_dict()
+                allow_row_edit = can_edit_record_row(current_role, selected_view, row_data)
+
+                col_btn1, col_btn2 = st.columns(2)
+
+                with col_btn1:
+                    if allow_row_edit and st.button("✏️ Edit Selected Record", use_container_width=True, key=f"btn_edit_{selected_view}"):
+                        st.session_state[f"editing_id_{selected_view}"] = selected_row_id
+                    elif not allow_row_edit:
+                        st.caption("Edit restricted to record owner or Superuser.")
+
+                with col_btn2:
+                    table_low = selected_view.lower()
+                    if current_role == "Superuser":
+                        if st.button("🗄️ Archive & Delete Record (30-Day Retention)", use_container_width=True, key=f"btn_del_{selected_view}"):
+                            try:
+                                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                                purge_dt = now_utc + datetime.timedelta(days=ARCHIVE_RETENTION_DAYS)
+                                sum_parts = [f"{table_low} | ID={selected_row_id}"]
+                                for k in ["activity_name", "sp_name", "dv_number", "municipality", "barangay", "cycle_batch"]:
+                                    if k in row_data and row_data[k] is not None and str(row_data[k]).strip() != "":
+                                        sum_parts.append(f"{k}={row_data[k]}")
+                                with engine.begin() as conn:
+                                    conn.execute(
+                                        text("""
+                                            INSERT INTO archived_records (source_table, original_record_id, record_summary, record_payload, requested_by, approved_by, archived_at, auto_purge_at)
+                                            VALUES (:st, :orid, :sum, :pay, :reqby, :appby, :arch, :prg)
+                                        """),
+                                        {
+                                            "st": table_low,
+                                            "orid": int(selected_row_id),
+                                            "sum": " | ".join(sum_parts),
+                                            "pay": serialize_record_payload(row_data),
+                                            "reqby": current_user_name,
+                                            "appby": current_user_name,
+                                            "arch": now_utc,
+                                            "prg": purge_dt,
+                                        },
+                                    )
+                                    conn.execute(text(f"DELETE FROM {table_low} WHERE id = :id"), {"id": selected_row_id})
+                                st.toast("✅ Archived for 30 days!", icon="🗄️")
+                                st.success(f"Record ID {selected_row_id} moved to 30-day archive!")
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"❌ DATABASE ERROR: {ex}")
+                    elif current_role != "CEF":
+                        req_reason = st.text_input("Reason for Delete Request:", key=f"del_reason_{selected_view}_{selected_row_id}")
+                        if st.button("📤 Request Delete (Needs Superuser Approval)", use_container_width=True, key=f"btn_req_del_{selected_view}"):
+                            try:
+                                submit_deletion_request(table_low, row_data, req_reason)
+                                st.toast("📤 Delete request sent to Superuser!", icon="📨")
+                                st.success("Deletion request submitted for Superuser approval.")
+                            except Exception as ex:
+                                st.error(f"❌ DATABASE ERROR: {ex}")
+
+                if st.session_state.get(f"editing_id_{selected_view}") == selected_row_id and allow_row_edit:
                     st.markdown(f"##### 📝 Editing Record ID: `{selected_row_id}`")
-                    row_data = df_filtered[df_filtered["id"] == selected_row_id].iloc[0].to_dict()
-                    
+
                     with st.form(f"form_edit_row_{selected_view}_{selected_row_id}"):
                         updated_vals = {}
                         col_e1, col_e2 = st.columns(2)
                         keys = [k for k in row_data.keys() if k != "id"]
-                        
+
                         for idx, k in enumerate(keys):
                             val = row_data[k]
                             target_col = col_e1 if idx % 2 == 0 else col_e2
@@ -2112,17 +2550,17 @@ else:
                                 updated_vals[k] = target_col.number_input(f"{k}", value=float(val))
                             else:
                                 updated_vals[k] = target_col.text_input(f"{k}", value=str(val) if not pd.isna(val) else "")
-                        
+
                         save_edit_btn = st.form_submit_button("💾 Save Updated Record Changes", use_container_width=True)
                         if save_edit_btn:
                             try:
                                 set_clause = ", ".join([f"{k} = :{k}" for k in updated_vals.keys()])
                                 updated_vals["id"] = selected_row_id
                                 table_low = selected_view.lower()
-                                
+
                                 with engine.begin() as conn:
                                     conn.execute(text(f"UPDATE {table_low} SET {set_clause} WHERE id = :id"), updated_vals)
-                                
+
                                 st.toast("✅ Record updated successfully!", icon="💾")
                                 st.success(f"Record ID {selected_row_id} updated!")
                                 st.session_state[f"editing_id_{selected_view}"] = None
