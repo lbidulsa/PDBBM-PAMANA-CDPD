@@ -66,12 +66,12 @@ def convert_image_to_base64(uploaded_file):
     return ""
 
 # ---------------------------------------------------------
-# EXECUTIVE PLOTLY STYLING HELPER (SLIM BARS + PAMANA THEME)
+# EXECUTIVE PLOTLY STYLING HELPER (SLIM BAR DIAGRAM + PAMANA THEME)
 # ---------------------------------------------------------
 PAMANA_PALETTE = [
-    "#0F2A4A", "#1D4ED8", "#0284C7", "#0EA5E9",
+    "#0F2A4A", "#0284C7", "#0EA5E9", "#1D4ED8",
     "#0D9488", "#2563EB", "#38BDF8", "#1E3A8A",
-    "#0F766E", "#6366F1", "#0369A1", "#3B82F6"
+    "#0F766E", "#0369A1", "#3B82F6", "#06B6D4"
 ]
 
 def style_vibrant_fig(fig, title_text="", height=350, is_bar=False):
@@ -81,11 +81,11 @@ def style_vibrant_fig(fig, title_text="", height=350, is_bar=False):
             font=dict(size=14, color="#0F2A4A", family="Arial, sans-serif"),
             x=0.01,
         ) if title_text else None,
-        paper_bgcolor="rgba(255,255,255,0.95)",
+        paper_bgcolor="rgba(255,255,255,0.96)",
         plot_bgcolor="rgba(248,250,255,0.98)",
         font=dict(color="#1E293B", family="Arial, sans-serif"),
         height=height,
-        margin=dict(l=16, r=20, t=36 if title_text else 20, b=24),
+        margin=dict(l=16, r=24, t=36 if title_text else 22, b=26),
         hoverlabel=dict(
             bgcolor="#0F2A4A",
             font_size=12,
@@ -98,12 +98,77 @@ def style_vibrant_fig(fig, title_text="", height=350, is_bar=False):
     if is_bar:
         fig.update_traces(
             marker_line_color="#0F2A4A",
-            marker_line_width=1.0,
-            opacity=0.92,
+            marker_line_width=1.1,
+            opacity=0.95,
         )
-        fig.update_xaxes(showgrid=True, gridcolor="rgba(148,163,184,0.22)", zeroline=False)
-        fig.update_yaxes(showgrid=False, zeroline=False)
     return fig
+
+def build_bar_diagram(
+    df_plot,
+    x_col,
+    y_col,
+    orientation="v",
+    color_col=None,
+    color_map=None,
+    facet_col=None,
+    bar_width=0.22,
+    height=330,
+    text_fmt=",.0f",
+    sort_ascending=True,
+):
+    """Builds a clean, slim bar diagram (avoiding bulky square/rectangular blocks)."""
+    fig = px.bar(
+        df_plot,
+        x=x_col,
+        y=y_col,
+        color=color_col,
+        color_discrete_map=color_map,
+        color_discrete_sequence=PAMANA_PALETTE,
+        facet_col=facet_col,
+        orientation=orientation,
+        barmode="group",
+        text_auto=text_fmt,
+    )
+    fig.update_traces(
+        width=bar_width,
+        textposition="outside",
+        textfont=dict(size=12, color="#0F2A4A", family="Arial, sans-serif"),
+        cliponaxis=False,
+    )
+
+    val_col = x_col if orientation == "h" else y_col
+    max_val = 0
+    if not df_plot.empty and val_col in df_plot.columns:
+        numeric_vals = pd.to_numeric(df_plot[val_col], errors="coerce").dropna()
+        if not numeric_vals.empty:
+            max_val = float(numeric_vals.max())
+    upper_bound = max(max_val * 1.25, 1.0)
+
+    if orientation == "h":
+        fig.update_xaxes(
+            range=[0, upper_bound],
+            showgrid=True,
+            gridcolor="rgba(148,163,184,0.24)",
+            zeroline=False,
+        )
+        fig.update_yaxes(
+            showgrid=False,
+            zeroline=False,
+            categoryorder="total ascending" if sort_ascending else "total descending",
+        )
+    else:
+        fig.update_yaxes(
+            range=[0, upper_bound],
+            showgrid=True,
+            gridcolor="rgba(148,163,184,0.24)",
+            zeroline=False,
+        )
+        fig.update_xaxes(
+            showgrid=False,
+            zeroline=False,
+        )
+
+    return style_vibrant_fig(fig, height=height, is_bar=True)
 
 # ---------------------------------------------------------
 # PAGE CONFIGURATION & CUSTOM STYLING
@@ -228,32 +293,34 @@ st.markdown(
         color: #E2E8F0 !important;
     }
     
+    /* Brighter, Crisp Executive Buttons */
     div.stButton > button, 
     div.stFormSubmitButton > button,
     .stSidebar div.stButton > button {
-        background: linear-gradient(135deg, #FFFFFF 0%, #E2E8F0 100%) !important;
-        color: #0F2A4A !important;
-        font-weight: bold !important;
+        background: linear-gradient(135deg, #FFFFFF 0%, #E0F2FE 55%, #BAE6FD 100%) !important;
+        color: #0B1F3A !important;
+        font-weight: 800 !important;
         border-radius: 10px !important;
-        border: 1px solid #CBD5E1 !important;
+        border: 1.5px solid #0284C7 !important;
         padding: 8px 20px !important;
-        transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.06) !important;
+        transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+        box-shadow: 0 3px 10px rgba(2, 132, 199, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
     }
     
     div.stButton > button:hover, 
     div.stFormSubmitButton > button:hover,
     .stSidebar div.stButton > button:hover {
-        background: linear-gradient(135deg, #E0F2FE 0%, #FFFFFF 100%) !important;
-        color: #0F2A4A !important;
-        border-color: #0284C7 !important;
-        box-shadow: 0 0 14px rgba(2, 132, 199, 0.35) !important;
-        transform: translateY(-2px) scale(1.01) !important;
+        background: linear-gradient(135deg, #FFFFFF 0%, #F0F9FF 50%, #7DD3FC 100%) !important;
+        color: #082F49 !important;
+        border-color: #0369A1 !important;
+        box-shadow: 0 0 18px rgba(14, 165, 233, 0.55), 0 4px 12px rgba(2, 132, 199, 0.28) !important;
+        transform: translateY(-2px) scale(1.015) !important;
     }
     
     div.stButton > button:active, 
     div.stFormSubmitButton > button:active,
     .stSidebar div.stButton > button:active {
+        background: linear-gradient(135deg, #BAE6FD 0%, #7DD3FC 100%) !important;
         transform: translateY(1px) scale(0.99) !important;
     }
     
@@ -836,20 +903,17 @@ if selected_view == "Executive Dashboard":
         if not df_sp.empty and "male_beneficiaries" in df_sp.columns and "female_beneficiaries" in df_sp.columns:
             m_sum = df_sp["male_beneficiaries"].sum()
             f_sum = df_sp["female_beneficiaries"].sum()
-            fig_gender = px.bar(
+            fig_gender = build_bar_diagram(
                 pd.DataFrame({"Gender": ["Male", "Female"], "Count": [m_sum, f_sum]}),
-                x="Gender",
-                y="Count",
-                color="Gender",
-                text_auto=",.0f",
-                color_discrete_map={"Male": "#0F2A4A", "Female": "#0284C7"},
+                x_col="Gender",
+                y_col="Count",
+                orientation="v",
+                color_col="Gender",
+                color_map={"Male": "#0F2A4A", "Female": "#0284C7"},
+                bar_width=0.22,
+                height=340,
             )
-            fig_gender.update_traces(
-                width=0.34,
-                textfont=dict(size=12, color="#0F2A4A"),
-                textposition="outside",
-            )
-            st.plotly_chart(style_vibrant_fig(fig_gender, height=340, is_bar=True), use_container_width=True)
+            st.plotly_chart(fig_gender, use_container_width=True)
         else:
             st.info("No beneficiary records found.")
 
@@ -883,25 +947,17 @@ if selected_view == "Executive Dashboard":
         if not df_ceac_brgy.empty and "activity_name" in df_ceac_brgy.columns:
             brgy_counts = df_ceac_brgy["activity_name"].fillna("Unspecified").value_counts().reset_index()
             brgy_counts.columns = ["Activity", "Count"]
-            fig_cb = px.bar(
+            fig_cb = build_bar_diagram(
                 brgy_counts,
-                x="Count",
-                y="Activity",
+                x_col="Count",
+                y_col="Activity",
                 orientation="h",
-                text_auto=True,
-                color="Activity",
-                color_discrete_sequence=PAMANA_PALETTE,
+                color_col="Activity",
+                bar_width=0.16 if len(brgy_counts) <= 2 else 0.34,
+                height=310,
             )
-            fig_cb.update_traces(
-                width=0.38 if len(brgy_counts) <= 2 else 0.58,
-                textfont=dict(size=12, color="#0F2A4A"),
-                textposition="outside",
-            )
-            fig_cb.update_layout(
-                showlegend=False,
-                yaxis={"categoryorder": "total ascending"},
-            )
-            st.plotly_chart(style_vibrant_fig(fig_cb, height=320, is_bar=True), use_container_width=True)
+            fig_cb.update_layout(showlegend=False)
+            st.plotly_chart(fig_cb, use_container_width=True)
         else:
             st.info("No CEAC Barangay records found.")
 
@@ -910,29 +966,21 @@ if selected_view == "Executive Dashboard":
         if not df_ceac_muni.empty and "activity_name" in df_ceac_muni.columns:
             muni_counts = df_ceac_muni["activity_name"].fillna("Unspecified").value_counts().reset_index()
             muni_counts.columns = ["Activity", "Count"]
-            fig_cm = px.bar(
+            fig_cm = build_bar_diagram(
                 muni_counts,
-                x="Count",
-                y="Activity",
+                x_col="Count",
+                y_col="Activity",
                 orientation="h",
-                text_auto=True,
-                color="Activity",
-                color_discrete_sequence=PAMANA_PALETTE,
+                color_col="Activity",
+                bar_width=0.16 if len(muni_counts) <= 2 else 0.34,
+                height=310,
             )
-            fig_cm.update_traces(
-                width=0.38 if len(muni_counts) <= 2 else 0.58,
-                textfont=dict(size=12, color="#0F2A4A"),
-                textposition="outside",
-            )
-            fig_cm.update_layout(
-                showlegend=False,
-                yaxis={"categoryorder": "total ascending"},
-            )
-            st.plotly_chart(style_vibrant_fig(fig_cm, height=320, is_bar=True), use_container_width=True)
+            fig_cm.update_layout(showlegend=False)
+            st.plotly_chart(fig_cm, use_container_width=True)
         else:
             st.info("No CEAC Municipal records found.")
 
-    # Slimmer Grouped Bar Chart for Cycle Progression
+    # Slimmer Bar Diagram for Cycle Progression (avoiding bulky square block)
     anim_frames = []
     if not df_ceac_brgy.empty and "activity_name" in df_ceac_brgy.columns:
         ab = df_ceac_brgy.copy()
@@ -952,26 +1000,21 @@ if selected_view == "Executive Dashboard":
             .size()
             .reset_index(name="Activities")
         )
-        if not df_anim_grp.empty and df_anim_grp["Cycle"].nunique() >= 1:
+        if not df_anim_grp.empty:
             st.markdown("##### 📊 CEAC Activity Progression by Cycle")
-            fig_anim = px.bar(
+            use_facet = df_anim_grp["Cycle"].nunique() > 1
+            fig_anim = build_bar_diagram(
                 df_anim_grp,
-                x="activity_name",
-                y="Activities",
-                color="Level",
-                animation_frame="Cycle",
-                barmode="group",
-                text_auto=True,
-                color_discrete_map={"Barangay": "#0284C7", "Municipal": "#0F2A4A"},
+                x_col="activity_name",
+                y_col="Activities",
+                orientation="v",
+                color_col="Level",
+                color_map={"Barangay": "#0284C7", "Municipal": "#0F2A4A"},
+                facet_col="Cycle" if use_facet else None,
+                bar_width=0.14 if df_anim_grp["activity_name"].nunique() <= 2 else 0.24,
+                height=310,
             )
-            fig_anim.update_traces(
-                width=0.26 if df_anim_grp["activity_name"].nunique() <= 3 else 0.42,
-                textposition="outside",
-                textfont=dict(size=12, color="#0F2A4A"),
-            )
-            fig_anim.layout.updatemenus[0].buttons[0].args[1]["frame"]["duration"] = 900
-            fig_anim.layout.updatemenus[0].buttons[0].args[1]["transition"]["duration"] = 500
-            st.plotly_chart(style_vibrant_fig(fig_anim, height=330, is_bar=True), use_container_width=True)
+            st.plotly_chart(fig_anim, use_container_width=True)
 
     recent_frames = []
     if not df_ceac_brgy.empty:
