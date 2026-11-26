@@ -2654,7 +2654,7 @@ else:
                         att_saved, brgy_min_saved, min_saved, other_saved = "N/A - CV", "N/A - CV", "N/A - CV", "N/A - CV"
                         cv_saved = save_multiple_files(cv_files)
                     else:
-                        st.markdown("##### 📁 Tagas-tagsa Upload MOVs (Separate Buttons for Barangay Activities)")
+                        st.markdown("##### 📁 tagsa-tagsa Upload MOVs (Separate Buttons for Barangay Activities)")
                         mov_col1, mov_col2, mov_col3, mov_col4 = st.columns(4)
                         with mov_col1:
                             st.markdown("**1. Upload Attendance**")
