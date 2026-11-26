@@ -2756,4 +2756,253 @@ else:
 
                             with col_right:
                                 form_data["closing_accounts_status"] = st.selectbox("Closing Accounts Status", CLOSEOUT_STATUSES, key="sp_cas")
-                                form_data["date_account_closed"] = st
+                                form_data["date_account_closed"] = st.date_input("Date Account Closed", datetime.date.today(), key="sp_dac").strftime("%Y-%m-%d")
+                                form_data["booking_assets_status"] = st.selectbox("Booking Assets Status", CLOSEOUT_STATUSES, key="sp_bas")
+                                form_data["date_booking_assets"] = st.date_input("Date Booking Assets", datetime.date.today(), key="sp_dba").strftime("%Y-%m-%d")
+                                form_data["overall_closeout_status"] = st.selectbox("Overall Closeout Status", ["Ongoing Implementation", "For Closeout", "Fully Closed & Turned Over", "On Hold"], key="sp_ocs")
+                                form_data["encoded_status"] = st.selectbox("Encoded Status", ENCODED_OPTIONS, key="sp_enc")
+                                form_data["target_hhs"] = st.number_input("Target HHs", min_value=0, step=1, key="sp_thh")
+                                form_data["actual_hhs"] = st.number_input("Actual HHs", min_value=0, step=1, key="sp_ahh")
+                                form_data["male_beneficiaries"] = st.number_input("Male Beneficiaries", min_value=0, step=1, key="sp_mb")
+                                form_data["female_beneficiaries"] = st.number_input("Female Beneficiaries", min_value=0, step=1, key="sp_fb")
+                                form_data["remarks"] = st.text_area("Remarks", key="sp_rem")
+                                form_data["mov_file"] = ""
+
+                            form_data["total_beneficiaries"] = form_data["male_beneficiaries"] + form_data["female_beneficiaries"]
+                            form_data["hh_variance"] = form_data["actual_hhs"] - form_data["target_hhs"]
+
+                        elif selected_view == "Disbursement":
+                            with col_left:
+                                form_data["sp_id"] = st.text_input("Sub-Project ID / Code (Put 'N/A' if no SP ID)*", key="d_spid")
+                                form_data["sp_name"] = st.text_input("Sub-Project Name", key="d_spname")
+                                form_data["municipality"] = st.selectbox("Municipality*", MUNICIPALITIES, key="d_mun")
+                                form_data["dv_number"] = st.text_input("Disbursement Voucher (DV) No.*", key="d_dv")
+                                form_data["check_number"] = st.text_input("Check / LDDAP No.", key="d_chk")
+                                form_data["payee"] = st.text_input("Payee / Recipient", key="d_payee")
+                                form_data["disbursement_date"] = st.date_input("Disbursement Date", datetime.date.today(), key="d_dt").strftime("%Y-%m-%d")
+                            with col_right:
+                                form_data["amount"] = st.number_input("Gross Amount (₱)", min_value=0.0, step=100.0, key="d_amt")
+                                form_data["tax_amount"] = st.number_input("Tax Amount (₱)", min_value=0.0, step=100.0, key="d_tax")
+                                form_data["net_amount"] = form_data["amount"] - form_data["tax_amount"]
+                                form_data["status"] = st.selectbox("Disbursement Status", ["Released", "Pending Liquidation", "Liquidated", "Cancelled"], key="d_stat")
+                                form_data["encoded_status"] = st.selectbox("Encoded Status", ENCODED_OPTIONS, key="d_enc")
+                                form_data["mov_file"] = ""
+                                form_data["attachment"] = ""
+
+                        else:
+                            with col_left:
+                                form_data["municipality"] = st.selectbox("Municipality", MUNICIPALITIES, key="sum_mun")
+                                form_data["total_sps"] = st.number_input("Total Sub-Projects", min_value=0, step=1, key="sum_sps")
+                                form_data["total_grant"] = st.number_input("Total Grant Allocation (₱)", min_value=0.0, step=1000.0, key="sum_grant")
+                            with col_right:
+                                form_data["total_disbursed"] = st.number_input("Total Disbursed Amount (₱)", min_value=0.0, step=1000.0, key="sum_disb")
+                                form_data["total_liquidated"] = st.number_input("Total Liquidated Amount (₱)", min_value=0.0, step=1000.0, key="sum_liq")
+                                form_data["unliquidated_balance"] = form_data["total_disbursed"] - form_data["total_liquidated"]
+
+                        st.markdown("---")
+                        b1, b2, b3 = st.columns([2, 2, 1])
+                        save_btn = b1.form_submit_button("💾 Save Record to Database", use_container_width=True)
+                        cancel_btn = b3.form_submit_button("❌ Cancel", use_container_width=True)
+
+                        if save_btn:
+                            valid = True
+                            if selected_view == "Sub_Project_Closeout_Tracker" and (not form_data.get("sp_id") or not form_data.get("sp_name")):
+                                st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug sulati ang Sub-Project ID (o 'N/A') ug Sub-Project Name!")
+                                valid = False
+                            elif selected_view == "Disbursement" and (not form_data.get("sp_id") or not form_data.get("dv_number")):
+                                st.error("⚠️ **REQUIRED FIELDS MISSING:** Palihug sulati ang Sub-Project ID (o 'N/A') ug DV Number!")
+                                valid = False
+
+                            if valid:
+                                table_low = selected_view.lower()
+                                col_names_str = ", ".join(form_data.keys())
+                                placeholders = ", ".join([f":{k}" for k in form_data.keys()])
+
+                                try:
+                                    with engine.begin() as conn:
+                                        conn.execute(
+                                            text(f"INSERT INTO {table_low} ({col_names_str}) VALUES ({placeholders})"),
+                                            form_data,
+                                        )
+
+                                        if selected_view == "Disbursement":
+                                            d_mun = form_data.get("municipality")
+                                            d_amt = form_data.get("amount", 0.0)
+
+                                            if d_mun:
+                                                sum_res = conn.execute(
+                                                    text("SELECT total_disbursed, total_liquidated FROM summary WHERE lower(municipality) = lower(:m)"),
+                                                    {"m": d_mun},
+                                                ).fetchone()
+
+                                                if sum_res:
+                                                    curr_disb = float(sum_res[0] or 0.0) + float(d_amt)
+                                                    curr_liq = float(sum_res[1] or 0.0)
+                                                    new_unliq = curr_disb - curr_liq
+
+                                                    conn.execute(
+                                                        text("""
+                                                            UPDATE summary
+                                                            SET total_disbursed = :td, unliquidated_balance = :ub
+                                                            WHERE lower(municipality) = lower(:m)
+                                                        """),
+                                                        {"td": curr_disb, "ub": new_unliq, "m": d_mun},
+                                                    )
+                                                else:
+                                                    conn.execute(
+                                                        text("""
+                                                            INSERT INTO summary (municipality, total_sps, total_grant, total_disbursed, total_liquidated, unliquidated_balance)
+                                                            VALUES (:m, 1, :td, :td, 0.0, :td)
+                                                        """),
+                                                        {"m": d_mun, "td": float(d_amt)},
+                                                    )
+
+                                    st.toast(f"✅ Record saved to {selected_view} & Auto-Reflected to Summary!", icon="💾")
+                                    st.success("Record saved and Summary Module updated successfully!")
+                                    st.session_state["show_add_form"] = False
+                                    st.rerun()
+                                except Exception as ex:
+                                    st.error(f"❌ DATABASE ERROR: {ex}")
+    else:
+        st.info(f"👁️ **VIEW-ONLY MODE:** Your assigned role (`{current_role}`) is restricted from adding or editing records in '{selected_view}'.")
+
+    st.markdown("---")
+    st.subheader(f"📊 Added Activities Masterlist ({selected_view})")
+
+    df_current = load_db_table(selected_view.lower())
+    search_q = st.text_input("🔍 Quick Keyword Search Across Records:", "")
+    df_filtered = df_current.copy()
+    if search_q and not df_filtered.empty:
+        mask = df_filtered.astype(str).apply(lambda row: row.str.contains(search_q, case=False).any(), axis=1)
+        df_filtered = df_filtered[mask]
+
+    if not df_filtered.empty:
+        can_sync_table = (current_role == "Superuser") or has_edit_perm
+
+        edited_df = st.data_editor(
+            df_filtered,
+            use_container_width=True,
+            num_rows="dynamic" if can_sync_table else "fixed",
+            disabled=not can_sync_table,
+            key=f"editor_{selected_view}",
+        )
+        if can_sync_table and st.button("💾 Sync Table Changes to Database", key=f"sync_btn_{selected_view}"):
+            table_low = selected_view.lower()
+            try:
+                with engine.begin() as conn:
+                    edited_df.to_sql(table_low, conn, if_exists="replace", index=False)
+                st.toast("✅ Table changes synchronized to Supabase!", icon="🎉")
+                st.success("Database synchronized successfully!")
+                st.rerun()
+            except Exception as ex:
+                st.error(f"❌ DATABASE ERROR: {ex}")
+
+        # MOV Inspector (Superuser, MDM, or record encoder) + Bulk Upload & Remove Attachment option
+        render_mov_inspector(df_filtered, selected_view)
+
+        if "id" in df_filtered.columns:
+            st.markdown("---")
+            with st.expander(f"⚙️ Record Action Panel (Edit / Request Delete / Superuser Archive in {selected_view})"):
+                row_ids = df_filtered["id"].tolist()
+                selected_row_id = st.selectbox("Select Row ID:", row_ids, key=f"sel_id_{selected_view}")
+                row_data = df_filtered[df_filtered["id"] == selected_row_id].iloc[0].to_dict()
+                allow_row_edit = can_edit_record_row(current_role, selected_view, row_data)
+
+                col_btn1, col_btn2 = st.columns(2)
+
+                with col_btn1:
+                    if allow_row_edit and st.button("✏️ Edit Selected Record", use_container_width=True, key=f"btn_edit_{selected_view}"):
+                        st.session_state[f"editing_id_{selected_view}"] = selected_row_id
+                    elif not allow_row_edit:
+                        st.caption("Edit restricted to record owner or Superuser.")
+
+                with col_btn2:
+                    table_low = selected_view.lower()
+                    if current_role == "Superuser":
+                        if st.button("🗄️ Archive & Delete Record (30-Day Retention)", use_container_width=True, key=f"btn_del_{selected_view}"):
+                            try:
+                                now_utc = datetime.datetime.now(datetime.timezone.utc)
+                                purge_dt = now_utc + datetime.timedelta(days=ARCHIVE_RETENTION_DAYS)
+                                sum_parts = [f"{table_low} | ID={selected_row_id}"]
+                                for k in ["activity_name", "sp_name", "dv_number", "municipality", "barangay", "cycle_batch"]:
+                                    if k in row_data and row_data[k] is not None and str(row_data[k]).strip() != "":
+                                        sum_parts.append(f"{k}={row_data[k]}")
+                                with engine.begin() as conn:
+                                    conn.execute(
+                                        text("""
+                                            INSERT INTO archived_records (source_table, original_record_id, record_summary, record_payload, requested_by, approved_by, archived_at, auto_purge_at)
+                                            VALUES (:st, :orid, :sum, :pay, :reqby, :appby, :arch, :prg)
+                                        """),
+                                        {
+                                            "st": table_low,
+                                            "orid": int(selected_row_id),
+                                            "sum": " | ".join(sum_parts),
+                                            "pay": serialize_record_payload(row_data),
+                                            "reqby": current_user_name,
+                                            "appby": current_user_name,
+                                            "arch": now_utc,
+                                            "prg": purge_dt,
+                                        },
+                                    )
+                                    conn.execute(text(f"DELETE FROM {table_low} WHERE id = :id"), {"id": selected_row_id})
+                                st.toast("✅ Archived for 30 days!", icon="🗄️")
+                                st.success(f"Record ID {selected_row_id} moved to 30-day archive!")
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"❌ DATABASE ERROR: {ex}")
+                    elif current_role != "CEF":
+                        req_reason = st.text_input("Reason for Delete Request:", key=f"del_reason_{selected_view}_{selected_row_id}")
+                        if st.button("📤 Request Delete (Needs Superuser Approval)", use_container_width=True, key=f"btn_req_del_{selected_view}"):
+                            try:
+                                submit_deletion_request(table_low, row_data, req_reason)
+                                st.toast("📤 Delete request sent to Superuser!", icon="📨")
+                                st.success("Deletion request submitted for Superuser approval.")
+                            except Exception as ex:
+                                st.error(f"❌ DATABASE ERROR: {ex}")
+
+                if st.session_state.get(f"editing_id_{selected_view}") == selected_row_id and allow_row_edit:
+                    st.markdown(f"##### 📝 Editing Record ID: `{selected_row_id}`")
+
+                    with st.form(f"form_edit_row_{selected_view}_{selected_row_id}"):
+                        updated_vals = {}
+                        col_e1, col_e2 = st.columns(2)
+                        keys = [k for k in row_data.keys() if k != "id"]
+
+                        for idx, k in enumerate(keys):
+                            val = row_data[k]
+                            target_col = col_e1 if idx % 2 == 0 else col_e2
+                            if isinstance(val, (int, float)) and not pd.isna(val):
+                                updated_vals[k] = target_col.number_input(f"{k}", value=float(val))
+                            else:
+                                updated_vals[k] = target_col.text_input(f"{k}", value=str(val) if not pd.isna(val) else "")
+
+                        save_edit_btn = st.form_submit_button("💾 Save Updated Record Changes", use_container_width=True)
+                        if save_edit_btn:
+                            try:
+                                set_clause = ", ".join([f"{k} = :{k}" for k in updated_vals.keys()])
+                                updated_vals["id"] = selected_row_id
+                                table_low = selected_view.lower()
+
+                                with engine.begin() as conn:
+                                    conn.execute(text(f"UPDATE {table_low} SET {set_clause} WHERE id = :id"), updated_vals)
+
+                                st.toast("✅ Record updated successfully!", icon="💾")
+                                st.success(f"Record ID {selected_row_id} updated!")
+                                st.session_state[f"editing_id_{selected_view}"] = None
+                                st.rerun()
+                            except Exception as ex:
+                                st.error(f"❌ DATABASE ERROR: {ex}")
+
+    else:
+        st.info(f"No records found in '{selected_view}'.")
+
+st.markdown("---")
+st.markdown(
+    """
+    <div style="text-align: center; font-size: 0.85em; color: #6c757d; padding-bottom: 20px;">
+        ⚙️ <b>PAMANA Peace & Development Program Management System</b> | Powered by Streamlit & Python<br>
+        Designed & Developed by <b>LOUIE B. IDULSA - PDBBM ITO I</b> • DSWD Field Office X
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
