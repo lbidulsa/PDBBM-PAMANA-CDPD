@@ -80,7 +80,7 @@ def convert_image_to_base64(uploaded_file):
     """Converts uploaded photo directly to Base64 string for database storage"""
     if uploaded_file is not None:
         file_bytes = uploaded_file.getvalue()
-        base64_encoded = base64.b64encode(file_bytes).decode('utf-8')
+        base64_encoded = base64.b64encode(file_bytes).decode("utf-8")
         return f"data:{uploaded_file.type};base64,{base64_encoded}"
     return ""
 
@@ -178,12 +178,10 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Keep Streamlit Header & Toolbar visible for Sidebar Toggle (<<) and 3-Dots Theme Menu (⋮) */
     header[data-testid="stHeader"] {
         background: transparent !important;
     }
 
-    /* Hide Deploy Button, Toolbar Action Buttons (GitHub/Fork), Footer & Cloud Viewer Badge */
     .stAppDeployButton,
     [data-testid="stToolbarActions"],
     [data-testid="stActionButtonIcon"],
@@ -202,7 +200,6 @@ st.markdown(
         pointer-events: none !important;
     }
 
-    /* Ensure Sidebar Collapse/Expand Button (<< / >) and 3-Dots MainMenu Stay Visible */
     [data-testid="stSidebarCollapseButton"],
     [data-testid="collapsedControl"],
     #MainMenu {
@@ -210,7 +207,6 @@ st.markdown(
         display: flex !important;
     }
 
-    /* Clean Executive App Background */
     .stApp {
         background: radial-gradient(circle at top right, rgba(14, 165, 233, 0.08), transparent 45%),
                     radial-gradient(circle at bottom left, rgba(29, 78, 216, 0.06), transparent 45%),
@@ -236,7 +232,6 @@ st.markdown(
     .main-title { font-size: 26px; font-weight: 800; color: #FFFFFF; margin-bottom: 4px; letter-spacing: 0.3px; }
     .sub-title { font-size: 14px; color: #E0F2FE; margin-bottom: 0px; }
 
-    /* Updated Oval Badge Matching PAMANA Navy & Sky Blue Theme */
     .section-pill {
         display: inline-block;
         background: linear-gradient(90deg, #0F2A4A 0%, #1E40AF 55%, #0284C7 100%);
@@ -250,11 +245,11 @@ st.markdown(
         border: 1px solid rgba(186, 230, 253, 0.45);
         box-shadow: 0 3px 10px rgba(15, 42, 74, 0.18);
     }
-    
-    .stMetric { 
-        background: linear-gradient(145deg, #FFFFFF 0%, #F8FAFF 100%) !important; 
-        padding: 16px !important; 
-        border-radius: 14px !important; 
+
+    .stMetric {
+        background: linear-gradient(145deg, #FFFFFF 0%, #F8FAFF 100%) !important;
+        padding: 16px !important;
+        border-radius: 14px !important;
         border: 1px solid #CBD5E1 !important;
         border-top: 4px solid #0284C7 !important;
         box-shadow: 0 4px 12px rgba(15, 42, 74, 0.06) !important;
@@ -266,30 +261,29 @@ st.markdown(
         border-top-color: #0F2A4A !important;
         box-shadow: 0 8px 22px rgba(2, 132, 199, 0.22) !important;
     }
-    
-    .role-badge { 
-        background: linear-gradient(135deg, #0284C7 0%, #1E40AF 100%); 
-        color: white; 
-        padding: 5px 12px; 
-        border-radius: 20px; 
-        font-size: 12px; 
+
+    .role-badge {
+        background: linear-gradient(135deg, #0284C7 0%, #1E40AF 100%);
+        color: white;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 12px;
         font-weight: 700;
         display: inline-block;
         box-shadow: 0 2px 8px rgba(30, 64, 175, 0.3);
     }
-    
+
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #0B1F3A 0%, #0F2A4A 60%, #163A63 100%) !important;
         color: #FFFFFF !important;
     }
-    section[data-testid="stSidebar"] .stMarkdown, 
+    section[data-testid="stSidebar"] .stMarkdown,
     section[data-testid="stSidebar"] label,
     section[data-testid="stSidebar"] .stRadio label {
         color: #E2E8F0 !important;
     }
-    
-    /* Brighter, Crisp Executive Buttons */
-    div.stButton > button, 
+
+    div.stButton > button,
     div.stFormSubmitButton > button,
     .stSidebar div.stButton > button {
         background: linear-gradient(135deg, #FFFFFF 0%, #E0F2FE 55%, #BAE6FD 100%) !important;
@@ -301,8 +295,8 @@ st.markdown(
         transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
         box-shadow: 0 3px 10px rgba(2, 132, 199, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
     }
-    
-    div.stButton > button:hover, 
+
+    div.stButton > button:hover,
     div.stFormSubmitButton > button:hover,
     .stSidebar div.stButton > button:hover {
         background: linear-gradient(135deg, #FFFFFF 0%, #F0F9FF 50%, #7DD3FC 100%) !important;
@@ -311,14 +305,14 @@ st.markdown(
         box-shadow: 0 0 18px rgba(14, 165, 233, 0.55), 0 4px 12px rgba(2, 132, 199, 0.28) !important;
         transform: translateY(-2px) scale(1.015) !important;
     }
-    
-    div.stButton > button:active, 
+
+    div.stButton > button:active,
     div.stFormSubmitButton > button:active,
     .stSidebar div.stButton > button:active {
         background: linear-gradient(135deg, #BAE6FD 0%, #7DD3FC 100%) !important;
         transform: translateY(1px) scale(0.99) !important;
     }
-    
+
     .active-user-card {
         background: linear-gradient(90deg, #FFFFFF 0%, #F0F9FF 100%);
         border-left: 4px solid #0284C7;
@@ -343,26 +337,45 @@ st.markdown(
 if "privacy_accepted" not in st.session_state:
     st.session_state["privacy_accepted"] = False
 
-if hasattr(st, "dialog"):
+if not st.session_state["privacy_accepted"]:
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stDialog"] button[aria-label="Close"],
+        div[data-testid="stModal"] button[aria-label="Close"] {
+            display: none !important;
+            visibility: hidden !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
-    @st.dialog("🔒 DATA PRIVACY ACT COMPLIANCE REMINDER (RA 10173)")
-    def privacy_modal():
-        st.markdown("""
-        **DSWD FIELD OFFICE X • PAMANA PEACE & DEVELOPMENT PROGRAM**
-        
-        Pursuant to **Republic Act No. 10173 (Data Privacy Act of 2012)**:
-        
-        1. **Authorized Access Only:** This system contains official program records, CEAC activity logs, and financial disbursements.
-        2. **Confidentiality Notice:** Any unauthorized extraction, downloading, or distribution of internal records is strictly prohibited.
-        3. **Audit Trail:** All encoding sessions, file uploads, and data entries are timestamped and logged under registered user credentials.
-        """)
-        st.divider()
-        if st.button("✅ I Agree & Proceed to Portal", use_container_width=True):
+    if hasattr(st, "dialog"):
+        @st.dialog("🔒 DATA PRIVACY ACT COMPLIANCE REMINDER (RA 10173)")
+        def privacy_modal():
+            st.markdown("""
+            **DSWD FIELD OFFICE X • PAMANA PEACE & DEVELOPMENT PROGRAM**
+
+            Pursuant to **Republic Act No. 10173 (Data Privacy Act of 2012)**:
+
+            1. **Authorized Access Only:** This system contains official program records, CEAC activity logs, and financial disbursements.
+            2. **Confidentiality Notice:** Any unauthorized extraction, downloading, or distribution of internal records is strictly prohibited.
+            3. **Audit Trail:** All encoding sessions, file uploads, and data entries are timestamped and logged under registered user credentials.
+            """)
+            st.divider()
+            if st.button("✅ I Agree & Proceed to Portal", use_container_width=True, key="btn_agree_pamana_privacy"):
+                st.session_state["privacy_accepted"] = True
+                st.rerun()
+
+        privacy_modal()
+    else:
+        st.warning("⚠️ Please accept the Data Privacy Act (RA 10173) notice to proceed.")
+        if st.button("✅ I Agree & Proceed to Portal", key="btn_agree_pamana_fallback"):
             st.session_state["privacy_accepted"] = True
             st.rerun()
 
-    if not st.session_state["privacy_accepted"]:
-        privacy_modal()
+    st.stop()
 
 def generate_random_password(length=10):
     chars = string.ascii_letters + string.digits + "@#$%"
@@ -422,7 +435,7 @@ def send_credentials_email(recipient_email, recipient_name, temp_password, user_
               <hr style="border: 0; border-top: 1px solid #1F4E78;">
               <p>Dear <b>{recipient_name}</b>,</p>
               <p>{intro_text}</p>
-              
+
               <div style="background-color: #F4F6F9; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #1F4E78;">
                 {details_block}
               </div>
@@ -522,7 +535,7 @@ def get_db_engine():
         else:
             db_url = st.secrets.get("SUPABASE_URL", "")
     except Exception:
-        db_url = "" 
+        db_url = ""
     return create_engine(
         db_url,
         pool_pre_ping=True,
@@ -539,7 +552,6 @@ def load_db_table(table_name):
     except Exception:
         return pd.DataFrame()
 
-# AUTO-SYNC SCHEMA FOR NEW MOV OTHER/S, TEMP PASS EXPIRY, DELETE REQUESTS, 30-DAY ARCHIVE & MOV VAULT
 try:
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE user_accounts ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE;"))
@@ -696,7 +708,7 @@ def login():
                     is_expired = False
                     if otp_created_at:
                         time_diff = (datetime.datetime.now() - otp_created_at).total_seconds()
-                        if time_diff > OTP_EXPIRY_SECONDS: # 2 minutes TTL
+                        if time_diff > OTP_EXPIRY_SECONDS:
                             is_expired = True
 
                     if is_expired:
@@ -729,7 +741,6 @@ if not st.session_state["logged_in"]:
 # ---------------------------------------------------------
 if st.session_state.get("must_change_pass"):
     if hasattr(st, "dialog"):
-
         @st.dialog("🔑 MANDATORY PASSWORD CHANGE REQUIRED")
         def change_password_modal():
             st.warning("⚠️ You are currently using a temporary password. Please configure your new custom password to proceed.")
@@ -803,7 +814,7 @@ def can_edit_module(role, module):
     elif role == "MDM" and module in ["CEAC_Municipal", "CEAC_Barangay"]:
         return True
     elif role == "CEF":
-        return False  # CEF is strictly View-Only across all modules
+        return False
     return False
 
 def get_record_owner(record_row):
@@ -821,7 +832,6 @@ def is_record_owner(record_row):
     return bool(owner and owner.lower() == str(current_user_name or "").strip().lower())
 
 def can_view_movs(role, record_row=None):
-    """Superuser, MDM, and the user who encoded the record (plus Admin) can view MOVs."""
     if role in ["Superuser", "Admin", "MDM"]:
         return True
     if is_record_owner(record_row):
@@ -829,7 +839,6 @@ def can_view_movs(role, record_row=None):
     return False
 
 def can_edit_record_row(role, module, record_row):
-    """Superuser can edit any record; Admin and other non-CEF users can edit their own entry (or permitted module)."""
     if role == "Superuser":
         return True
     if role == "CEF":
@@ -840,8 +849,17 @@ def can_edit_record_row(role, module, record_row):
         return get_record_owner(record_row) == ""
     return can_edit_module(role, module)
 
+def can_remove_attachment(role, record_row):
+    """Superuser and the user who encoded the record can remove wrong attachments (CEF blocked)."""
+    if role == "CEF":
+        return False
+    if role == "Superuser":
+        return True
+    if is_record_owner(record_row):
+        return True
+    return False
+
 def persist_mov_to_vault(filename, file_bytes, mime_type=""):
-    """Stores a Base64 copy of an MOV file in Supabase so it survives container restarts."""
     if not filename or not file_bytes:
         return
     try:
@@ -862,7 +880,6 @@ def persist_mov_to_vault(filename, file_bytes, mime_type=""):
         pass
 
 def get_mov_bytes_from_vault(filename):
-    """Retrieves raw file bytes from mov_file_vault if available, and restores to disk."""
     if not filename:
         return None
     try:
@@ -903,8 +920,40 @@ def save_multiple_files(files_list):
             with open(file_path, "wb") as f:
                 f.write(file_bytes)
             persist_mov_to_vault(file_obj.name, file_bytes, getattr(file_obj, "type", ""))
-            saved_names.append(file_obj.name)
+            if file_obj.name not in saved_names:
+                saved_names.append(file_obj.name)
     return ", ".join(saved_names)
+
+def append_bulk_movs_to_target(existing_val, bulk_files_list, fallback_label="Other"):
+    """Saves bulk files to disk & vault and merges unique filenames into target field."""
+    existing_items = parse_mov_filenames(existing_val)
+    if not bulk_files_list:
+        return ", ".join(existing_items) if existing_items else (existing_val or "")
+
+    for file_obj in bulk_files_list:
+        file_bytes = file_obj.getvalue()
+        file_path = os.path.join("uploaded_movs", file_obj.name)
+        with open(file_path, "wb") as f:
+            f.write(file_bytes)
+        persist_mov_to_vault(file_obj.name, file_bytes, getattr(file_obj, "type", ""))
+        if file_obj.name not in existing_items:
+            existing_items.append(file_obj.name)
+
+    return ", ".join(existing_items) if existing_items else fallback_label
+
+def format_bulk_remarks_entry(existing_remarks, activity_context, bulk_files_list, remark_note):
+    """Appends structured bulk upload remarks with activity tag and file list."""
+    clean_existing = str(existing_remarks or "").strip()
+    clean_note = str(remark_note or "").strip()
+    file_names = [f.name for f in (bulk_files_list or [])]
+    if not file_names and not clean_note:
+        return clean_existing
+
+    stamp = get_ph_time().strftime("%Y-%m-%d %H:%M")
+    files_txt = ", ".join(file_names) if file_names else "N/A"
+    note_txt = clean_note if clean_note else "Bulk MOV upload"
+    entry = f"[Bulk MOV ({stamp}) | Activity/Scope: {activity_context} | Files: {files_txt}]: {note_txt}"
+    return f"{clean_existing}\n{entry}".strip() if clean_existing else entry
 
 def parse_mov_filenames(raw_val):
     if raw_val is None or pd.isna(raw_val):
@@ -914,8 +963,33 @@ def parse_mov_filenames(raw_val):
         return []
     return [part.strip() for part in txt.split(",") if part.strip()]
 
+def remove_attachment_from_record(table_low, record_id, col_name, target_filename, current_remarks=""):
+    """Removes a single attachment filename from a record column and logs removal in remarks."""
+    with engine.connect() as conn:
+        row = conn.execute(
+            text(f"SELECT {col_name}, remarks FROM {table_low} WHERE id = :rid"),
+            {"rid": int(record_id)},
+        ).fetchone()
+    if not row:
+        return False, "Record not found."
+
+    parts = parse_mov_filenames(row[0])
+    remaining = [p for p in parts if p != target_filename]
+    new_col_val = ", ".join(remaining) if remaining else ""
+
+    stamp = get_ph_time().strftime("%Y-%m-%d %H:%M")
+    prev_rem = str(row[1] or current_remarks or "").strip()
+    rem_entry = f"[Removed Attachment ({stamp}) by {current_user_name}]: {target_filename} (from {col_name})"
+    new_rem = f"{prev_rem}\n{rem_entry}".strip() if prev_rem else rem_entry
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(f"UPDATE {table_low} SET {col_name} = :val, remarks = :rem WHERE id = :rid"),
+            {"val": new_col_val, "rem": new_rem, "rid": int(record_id)},
+        )
+    return True, f"Removed `{target_filename}` from `{col_name}`."
+
 def render_pdf_pages_in_app(file_bytes: bytes, key_prefix: str, filename: str):
-    """Renders PDF pages directly inside Streamlit as images (no browser iframe/download needed)."""
     if HAS_PDFIUM:
         try:
             pdf = pdfium.PdfDocument(file_bytes)
@@ -1042,7 +1116,7 @@ def render_single_mov_file(filename, key_prefix, record_row=None, module_label="
                         st.error(f"❌ Restore error: {ex}")
 
 def render_mov_inspector(df_rows, module_label):
-    """Displays MOVs tagsa-tagsa for authorized users (Superuser, MDM, or record encoder)."""
+    """Displays MOVs tagsa-tagsa and allows Superuser or record encoder to remove wrong attachments."""
     st.markdown("---")
     st.subheader(f"🔎 MOV Inspector (Check Scanned Files One-by-One) — {module_label}")
 
@@ -1094,9 +1168,47 @@ def render_mov_inspector(df_rows, module_label):
 
     st.success(f"📂 Found **{len(all_files)}** uploaded MOV file(s) for `{sel_label}`.")
     file_choice_labels = [f"[{i+1}/{len(all_files)}] {slot}: {fname}" for i, (slot, _, fname) in enumerate(all_files)]
-    chosen_idx = st.selectbox("Choose MOV File to View (Tagas-tagsa):", range(len(all_files)), format_func=lambda i: file_choice_labels[i], key=f"mov_file_pick_{module_label}_{sel_rid}")
+    chosen_idx = st.selectbox(
+        "Choose MOV File to View (Tagas-tagsa):",
+        range(len(all_files)),
+        format_func=lambda i: file_choice_labels[i],
+        key=f"mov_file_pick_{module_label}_{sel_rid}",
+    )
     chosen_slot, chosen_col, chosen_fname = all_files[chosen_idx]
     st.caption(f"Category: **{chosen_slot}** (`{chosen_col}`)")
+
+    if can_remove_attachment(current_role, sel_row) and "id" in sel_row:
+        with st.expander(f"🗑️ Remove Wrong Attachment: `{chosen_fname}`"):
+            st.caption("Available to Superuser and the user who encoded this record.")
+            confirm_rm = st.checkbox(
+                f"Confirm removal of `{chosen_fname}` from `{chosen_col}`",
+                key=f"chk_rm_att_{module_label}_{sel_rid}_{chosen_idx}",
+            )
+            if st.button(
+                f"🗑️ Remove `{chosen_fname}` Now",
+                key=f"btn_rm_att_{module_label}_{sel_rid}_{chosen_idx}",
+                use_container_width=True,
+            ):
+                if not confirm_rm:
+                    st.warning("⚠️ Check the confirmation box first before removing the attachment.")
+                else:
+                    try:
+                        ok, msg = remove_attachment_from_record(
+                            module_label.lower(),
+                            sel_row["id"],
+                            chosen_col,
+                            chosen_fname,
+                            sel_row.get("remarks", ""),
+                        )
+                        if ok:
+                            st.toast(f"🗑️ {msg}", icon="🗑️")
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(f"❌ {msg}")
+                    except Exception as ex:
+                        st.error(f"❌ Error removing attachment: {ex}")
+
     render_single_mov_file(
         chosen_fname,
         key_prefix=f"insp_{module_label}_{sel_rid}_{chosen_idx}",
@@ -1146,7 +1258,6 @@ def submit_deletion_request(table_low, row_dict, reason_text):
         )
 
 def purge_expired_archives():
-    """Auto-purges archived records past their 30-day retention date."""
     try:
         with engine.begin() as conn:
             conn.execute(text("DELETE FROM archived_records WHERE auto_purge_at <= CURRENT_TIMESTAMP"))
@@ -1567,8 +1678,8 @@ elif selected_view == "User Management Portal":
                 st.markdown(
                     f"""
                     <div class="active-user-card">
-                        <b>👤 {u_name}</b> (`{u[2]}`) &nbsp;|&nbsp; 
-                        Role: <span class='role-badge'>{u[3]}</span> &nbsp;|&nbsp; 
+                        <b>👤 {u_name}</b> (`{u[2]}`) &nbsp;|&nbsp;
+                        Role: <span class='role-badge'>{u[3]}</span> &nbsp;|&nbsp;
                         <span style="color:#0284C7; font-weight:bold;">{is_curr}</span>
                     </div>
                 """,
@@ -1694,7 +1805,7 @@ elif selected_view == "User Management Portal":
 
     st.markdown("---")
     st.subheader("📋 Registered Users Masterlist & Login Timestamps")
-    
+
     try:
         df_users = pd.read_sql_query(
             text("SELECT id, full_name, email, user_role, require_change_pass, temp_pass_created_at, last_login FROM user_accounts ORDER BY id DESC"),
@@ -1802,7 +1913,7 @@ elif selected_view == "Geotagged_Photos":
         st.info(f"👁️ **VIEW-ONLY MODE:** Your assigned role (`{current_role}`) is restricted from uploading new photos in this module.")
 
     st.markdown("---")
-    
+
     col_gal_hdr, col_gal_btn = st.columns([3, 1])
     with col_gal_hdr:
         st.subheader("🖼️ Geotagged Photos Gallery & Interactive Viewer")
@@ -1817,7 +1928,7 @@ elif selected_view == "Geotagged_Photos":
     if not df_photos.empty:
         sp_filter = st.text_input("🔍 Search Photo by Sub-Project ID, Name, or Stage:", "", key="photo_search_input")
         df_p_filtered = df_photos.copy()
-        
+
         if sp_filter:
             mask = df_p_filtered.astype(str).apply(lambda row: row.str.contains(sp_filter, case=False).any(), axis=1)
             df_p_filtered = df_p_filtered[mask]
@@ -1825,7 +1936,7 @@ elif selected_view == "Geotagged_Photos":
         if not df_p_filtered.empty:
             st.markdown("##### 📷 Uploaded Photos Cards Grid:")
             cols = st.columns(3)
-            
+
             for idx, (_, row) in enumerate(df_p_filtered.iterrows()):
                 col_target = cols[idx % 3]
                 p_file_name = row.get("photo_file", "")
@@ -1839,7 +1950,7 @@ elif selected_view == "Geotagged_Photos":
                     rot_deg = st.selectbox(
                         f"🔄 Rotate Photo ({row.get('id', idx)})",
                         options=[0, 90, 180, 270],
-                        format_func=lambda x: f"Original (0°)" if x == 0 else f"Rotate {x}°",
+                        format_func=lambda x: "Original (0°)" if x == 0 else f"Rotate {x}°",
                         key=f"rot_{row.get('id', idx)}"
                     )
 
@@ -1927,7 +2038,7 @@ elif selected_view == "Finance":
         st.link_button("🔗 Open Full Google Sheet", sheet_url, use_container_width=True)
 
     st.markdown("---")
-    
+
     try:
         st.markdown(
             f"""
@@ -2222,12 +2333,12 @@ elif selected_view == "Data Extraction & Export":
         st.markdown("##### 📌 Extraction Settings")
         selected_mod = st.selectbox("Select Module to Extract Data From:", list(exportable_modules.keys()))
         mod_info = exportable_modules[selected_mod]
-        
+
         date_col_name = mod_info["date_col"]
 
         st.markdown("---")
         st.markdown("##### 📅 Date Range Filtering")
-        
+
         default_start = datetime.date(2026, 1, 1)
         default_end = datetime.date.today()
 
@@ -2348,7 +2459,7 @@ else:
                         att_saved, min_saved, lgu_saved, other_saved = "N/A - GRS Intake", "N/A - GRS Intake", "N/A - GRS Intake", "N/A - GRS Intake"
                         grs_saved = save_multiple_files(grs_files)
                     else:
-                        st.markdown("##### 📁 Upload MOVs (Separate Buttons for Municipal Activities)")
+                        st.markdown("##### 📁 Tagas-tagsa Upload MOVs (Separate Buttons for Municipal Activities)")
                         mov_col1, mov_col2, mov_col3, mov_col4 = st.columns(4)
                         with mov_col1:
                             st.markdown("**1. Upload Attendance**")
@@ -2373,6 +2484,38 @@ else:
                         grs_saved = ""
 
                     st.markdown("---")
+                    with st.expander("📦 Bulk MOV Upload (Dungan Upload + Activity / Document Remarks)"):
+                        st.caption("Gamita kini kung mag-dungan og upload og daghang MOV files ug i-specify ang activity/dokumento ug remarks.")
+                        cm_bulk_files = st.file_uploader(
+                            "Select Multiple MOV Files to Bulk Upload",
+                            type=["pdf", "png", "jpg", "jpeg", "docx"],
+                            accept_multiple_files=True,
+                            key="cm_bulk_files",
+                        )
+                        c_bm1, c_bm2 = st.columns(2)
+                        with c_bm1:
+                            cm_bulk_act_tag = st.selectbox(
+                                "Activity / MOV Type Tag",
+                                [selected_m_act, "Attendance", "Minutes of Activity", "LGU Minutes", "Other / Supporting Docs"],
+                                key="cm_bulk_act_tag",
+                            )
+                        with c_bm2:
+                            cm_bulk_remark_txt = st.text_input(
+                                "Bulk Remarks (Unsa nga activity / file details)",
+                                placeholder="e.g. Scanned signed attendance & minutes from 1st MDC",
+                                key="cm_bulk_remark_txt",
+                            )
+
+                    final_cm_remarks = format_bulk_remarks_entry(
+                        cm_remarks,
+                        f"{selected_m_act} ({cm_bulk_act_tag})",
+                        cm_bulk_files,
+                        cm_bulk_remark_txt,
+                    )
+                    if selected_m_act != "GRS Instake" and cm_bulk_files:
+                        other_saved = append_bulk_movs_to_target(other_saved, cm_bulk_files, "Other")
+
+                    st.markdown("---")
                     b1, b2, b3 = st.columns([2, 2, 1])
                     if b1.button("💾 Save Record to Database", use_container_width=True, key="cm_save_btn"):
                         try:
@@ -2386,7 +2529,7 @@ else:
                                         "act": selected_m_act, "reg": cm_region, "prov": cm_province, "mun": cm_municipality,
                                         "cyc": cm_cycle, "dt": cm_date, "denc": cm_date_enc, "enc": cm_encoder,
                                         "mst": cm_mov_st, "est": cm_enc_st, "att": att_saved, "min": min_saved,
-                                        "lgu": lgu_saved, "grs": grs_saved, "oth": other_saved, "rem": cm_remarks,
+                                        "lgu": lgu_saved, "grs": grs_saved, "oth": other_saved, "rem": final_cm_remarks,
                                     },
                                 )
                             st.toast("✅ Municipal Activity record saved to Supabase!", icon="🎉")
@@ -2428,7 +2571,7 @@ else:
                         att_saved, brgy_min_saved, min_saved, other_saved = "N/A - CV", "N/A - CV", "N/A - CV", "N/A - CV"
                         cv_saved = save_multiple_files(cv_files)
                     else:
-                        st.markdown("##### 📁 Upload MOVs (Separate Buttons for Barangay Activities)")
+                        st.markdown("##### 📁 Tagas-tagsa Upload MOVs (Separate Buttons for Barangay Activities)")
                         mov_col1, mov_col2, mov_col3, mov_col4 = st.columns(4)
                         with mov_col1:
                             st.markdown("**1. Upload Attendance**")
@@ -2453,6 +2596,38 @@ else:
                         cv_saved = ""
 
                     st.markdown("---")
+                    with st.expander("📦 Bulk MOV Upload (Dungan Upload + Activity / Document Remarks)"):
+                        st.caption("Gamita kini kung mag-dungan og upload og daghang MOV files ug i-specify ang activity/dokumento ug remarks.")
+                        cb_bulk_files = st.file_uploader(
+                            "Select Multiple MOV Files to Bulk Upload",
+                            type=["pdf", "png", "jpg", "jpeg", "docx"],
+                            accept_multiple_files=True,
+                            key="cb_bulk_files",
+                        )
+                        c_bb1, c_bb2 = st.columns(2)
+                        with c_bb1:
+                            cb_bulk_act_tag = st.selectbox(
+                                "Activity / MOV Type Tag",
+                                [selected_b_act, "Attendance", "Brgy Minutes", "Minutes of Activity", "Other / Supporting Docs"],
+                                key="cb_bulk_act_tag",
+                            )
+                        with c_bb2:
+                            cb_bulk_remark_txt = st.text_input(
+                                "Bulk Remarks (Unsa nga activity / file details)",
+                                placeholder="e.g. Scanned MOVs for Brgy Assembly & BDC resolution",
+                                key="cb_bulk_remark_txt",
+                            )
+
+                    final_cb_remarks = format_bulk_remarks_entry(
+                        cb_remarks,
+                        f"{selected_b_act} ({cb_bulk_act_tag})",
+                        cb_bulk_files,
+                        cb_bulk_remark_txt,
+                    )
+                    if selected_b_act != "CV" and cb_bulk_files:
+                        other_saved = append_bulk_movs_to_target(other_saved, cb_bulk_files, "Other")
+
+                    st.markdown("---")
                     b1, b2, b3 = st.columns([2, 2, 1])
                     if b1.button("💾 Save Record to Database", use_container_width=True, key="cb_save_btn"):
                         if not cb_barangay.strip():
@@ -2469,7 +2644,7 @@ else:
                                             "act": selected_b_act, "reg": cb_region, "prov": cb_province, "mun": cb_municipality,
                                             "brgy": cb_barangay.strip(), "cyc": cb_cycle, "dt": cb_date, "denc": cb_date_enc,
                                             "enc": cb_encoder, "mst": cb_mov_st, "est": cb_enc_st, "att": att_saved,
-                                            "bmin": brgy_min_saved, "min": min_saved, "cv": cv_saved, "oth": other_saved, "rem": cb_remarks,
+                                            "bmin": brgy_min_saved, "min": min_saved, "cv": cv_saved, "oth": other_saved, "rem": final_cb_remarks,
                                         },
                                     )
                                 st.toast("✅ Barangay Activity record saved to Supabase!", icon="🎉")
@@ -2584,8 +2759,8 @@ else:
 
                                                     conn.execute(
                                                         text("""
-                                                            UPDATE summary 
-                                                            SET total_disbursed = :td, unliquidated_balance = :ub 
+                                                            UPDATE summary
+                                                            SET total_disbursed = :td, unliquidated_balance = :ub
                                                             WHERE lower(municipality) = lower(:m)
                                                         """),
                                                         {"td": curr_disb, "ub": new_unliq, "m": d_mun},
@@ -2639,7 +2814,7 @@ else:
             except Exception as ex:
                 st.error(f"❌ DATABASE ERROR: {ex}")
 
-        # MOV Inspector (Superuser, MDM, or record encoder)
+        # MOV Inspector (Superuser, MDM, or record encoder) + Remove Attachment option
         render_mov_inspector(df_filtered, selected_view)
 
         if "id" in df_filtered.columns:
