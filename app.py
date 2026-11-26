@@ -1252,7 +1252,7 @@ def render_mov_inspector(df_rows, module_label):
     st.success(f"📂 Found **{len(all_files)}** uploaded MOV file(s) for `{sel_label}`.")
     file_choice_labels = [f"[{i+1}/{len(all_files)}] {slot}: {fname}" for i, (slot, _, fname) in enumerate(all_files)]
     chosen_idx = st.selectbox(
-        "Choose MOV File to View (Tagas-tagsa):",
+        "Choose MOV File to View (Tagsa-tagsa):",
         range(len(all_files)),
         format_func=lambda i: file_choice_labels[i],
         key=f"mov_file_pick_{module_label}_{sel_rid}",
