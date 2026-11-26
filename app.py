@@ -2542,7 +2542,7 @@ else:
                         att_saved, min_saved, lgu_saved, other_saved = "N/A - GRS Intake", "N/A - GRS Intake", "N/A - GRS Intake", "N/A - GRS Intake"
                         grs_saved = save_multiple_files(grs_files)
                     else:
-                        st.markdown("##### 📁 Tagas-tagsa Upload MOVs (Separate Buttons for Municipal Activities)")
+                        st.markdown("##### 📁 Tagsa-tagsa Upload MOVs (Separate Buttons for Municipal Activities)")
                         mov_col1, mov_col2, mov_col3, mov_col4 = st.columns(4)
                         with mov_col1:
                             st.markdown("**1. Upload Attendance**")
